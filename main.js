@@ -340,7 +340,7 @@ async function init() {
     
     document.getElementById('start-date').value = todayStr;
     document.getElementById('end-date').value = todayStr;
-    document.getElementById('current-date').innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+    document.getElementById('current-date').innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     await loadData();
 
@@ -378,6 +378,13 @@ async function init() {
                 // データ更新に成功したら設定パネルを隠す
                 document.getElementById('settings-body').classList.add('settings-hidden');
                 document.getElementById('toggle-settings').innerText = '▼';
+                
+                // データ更新後は期間範囲の表示に変更
+                const formatDateOnly = (val) => val ? val.replace(/-/g, '/').replace(/\/0/g, '/') : '';
+                const dateLabel = (start === end) 
+                    ? `${formatDateOnly(start)}` 
+                    : `${formatDateOnly(start)} ～ ${formatDateOnly(end)}`;
+                document.getElementById('current-date').innerText = `対象データ期間: ${dateLabel}`;
             }
         } finally { btn.innerText = 'データ更新'; btn.disabled = false; }
     });
