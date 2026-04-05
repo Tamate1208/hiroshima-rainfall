@@ -1,8 +1,8 @@
 {
   "name": "hiroshima-rainfall",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "広島県雨量観測可視化システム",
+  "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
     "dev": "vite --port 5500",
