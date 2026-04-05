@@ -373,7 +373,12 @@ async function init() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ start, end })
             });
-            if (res.ok) await loadData();
+            if (res.ok) {
+                await loadData();
+                // データ更新に成功したら設定パネルを隠す
+                document.getElementById('settings-body').classList.add('settings-hidden');
+                document.getElementById('toggle-settings').innerText = '▼';
+            }
         } finally { btn.innerText = 'データ更新'; btn.disabled = false; }
     });
 
@@ -387,6 +392,22 @@ async function init() {
         const hidden = body.style.display === 'none';
         body.style.display = hidden ? '' : 'none';
         btn.textContent = hidden ? '▲ 閉じる' : '▼ 開く';
+    });
+
+    // 右上設定パネルのトグル処理
+    document.getElementById('toggle-settings').addEventListener('click', () => {
+        const body = document.getElementById('settings-body');
+        const btn = document.getElementById('toggle-settings');
+        const isHidden = body.classList.contains('settings-hidden');
+        if (isHidden) {
+            body.classList.remove('settings-hidden');
+            btn.innerText = '⚙️';
+            btn.style.fontSize = '16px';
+        } else {
+            body.classList.add('settings-hidden');
+            btn.innerText = '▼';
+            btn.style.fontSize = '12px';
+        }
     });
 }
 

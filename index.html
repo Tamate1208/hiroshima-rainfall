@@ -30,35 +30,42 @@
     </div>
 
     <div class="overlay top-left">
-        <header>
-            <h1>広島県内雨量可視＋</h1>
-            <p id="current-date">2026年3月14日</p>
-        </header>
-        <div class="stats">
-            <div class="stat-item">
-                <span class="label">地図テーマ</span>
-                <select id="theme-selector" title="地図テーマを選択">
-                    <option value="dark">ダークモード</option>
-                    <option value="light">標準表示 (ライト)</option>
-                </select>
-            </div>
-            <div class="stat-item">
-                <span class="label">表示モード</span>
-                <select id="mode-selector" title="表示モードを選択">
-                    <option value="current">リアルタイム表示 (60分降水量)</option>
-                    <option value="max60">期間中最大60分降水量</option>
-                    <option value="max24">期間中最大24時間降水量</option>
-                </select>
-            </div>
-            <div class="stat-item date-picker">
-                <span class="label">期間設定</span>
-                <div class="date-inputs">
-                    <input type="date" id="start-date" title="開始日" value="2026-03-14">
-                    <span>～</span>
-                    <input type="date" id="end-date" title="終了日" value="2026-03-14">
+        <div class="glass main-panel-glass">
+            <header class="panel-header-flex">
+                <div>
+                    <h1>広島県内雨量可視＋</h1>
+                    <p id="current-date">2026年3月14日</p>
                 </div>
-                <button id="update-data" class="btn-small">データ更新</button>
-                <span id="update-status" class="update-status"></span>
+                <button id="toggle-settings" class="btn-icon" title="設定パネルを開閉">⚙️</button>
+            </header>
+            <div id="settings-body">
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="label">地図テーマ</span>
+                        <select id="theme-selector" title="地図テーマを選択">
+                            <option value="dark">ダークモード</option>
+                            <option value="light">標準表示 (ライト)</option>
+                        </select>
+                    </div>
+                    <div class="stat-item">
+                        <span class="label">表示モード</span>
+                        <select id="mode-selector" title="表示モードを選択">
+                            <option value="current">リアルタイム表示 (60分降水量)</option>
+                            <option value="max60">期間中最大60分降水量</option>
+                            <option value="max24">期間中最大24時間降水量</option>
+                        </select>
+                    </div>
+                    <div class="stat-item date-picker">
+                        <span class="label">期間設定</span>
+                        <div class="date-inputs">
+                            <input type="date" id="start-date" title="開始日" value="2026-03-14">
+                            <span>～</span>
+                            <input type="date" id="end-date" title="終了日" value="2026-03-14">
+                        </div>
+                        <button id="update-data" class="btn-small">データ更新</button>
+                        <span id="update-status" class="update-status"></span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
