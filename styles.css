@@ -545,5 +545,104 @@ select {
 
 @keyframes criteria-pulse {
     0%, 100% { opacity: 1.0; }
-    50%       { opacity: 0.45; }
+}
+
+/* ================================================================
+   レスポンシブデザイン (モバイル向け調整)
+================================================================ */
+@media (max-width: 768px) {
+    /* 左上: 設定パネルの最適化 */
+    .top-left {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        max-width: none;
+    }
+    
+    .top-left .glass {
+        padding: 12px;
+    }
+    
+    header h1 {
+        font-size: 18px;
+    }
+    
+    header p {
+        margin-bottom: 10px;
+    }
+    
+    .stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .stat-item {
+        flex: 1 1 45%;
+    }
+    
+    .stat-item.date-picker {
+        flex: 1 1 100%;
+        margin-top: 5px;
+    }
+    
+    .date-inputs input {
+        width: 100px;
+    }
+
+    /* 下部: 再生スライダーの最適化 */
+    .bottom-center {
+        width: 95%;
+        bottom: 15px;
+    }
+
+    .controls {
+        gap: 10px;
+        padding: 10px;
+    }
+    
+    .time-label {
+        min-width: 80px;
+        font-size: 14px;
+    }
+
+    /* 右下: 凡例の最適化 */
+    .legend {
+        bottom: 80px; /* スライダーと被らないように上に配置 */
+        right: 10px;
+        padding: 10px;
+    }
+    
+    .legend h3 {
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+    
+    .scale-item span {
+        width: 16px;
+        height: 10px;
+    }
+
+    /* 超過局パネルの画面下部配置 (モバイル特化) */
+    .top-right {
+        top: auto;
+        bottom: 15px;
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-height: 50vh;
+    }
+    
+    .adoption-glass {
+        padding: 10px;
+        max-height: 50vh;
+    }
+    
+    .panel-title-row h3 {
+        font-size: 13px;
+    }
+    
+    .table-wrap {
+        max-height: calc(50vh - 80px);
+    }
 }
