@@ -646,31 +646,67 @@ function updateAdoptionPanel(mode) {
         .filter(s => s.val !== null && s.val >= criteria)
         .sort((a, b) => b.val - a.val);
 
+    // 市区町村プルダウンの動的生成
+    const filterSelect = document.getElementById('adoption-city-filter');
+    const currentVal = filterSelect.value;
+    const cities = [...new Set(exceeded.map(s => s.city))].sort();
+    
+    filterSelect.innerHTML = '<option value="all">すべての市町</option>' + 
+        cities.map(c => `<option value="${c}">${c}</option>`).join('');
+    
+    // 現在の選択値を維持、該当しなければ「すべて」に戻す
+    if (cities.includes(currentVal)) {
+        filterSelect.value = currentVal;
+    } else {
+        filterSelect.value = 'all';
+    }
+
+    window._adoptionExportData = { exceeded, mode, criteria };
+    renderAdoptionTable();
+}
+
+function renderAdoptionTable() {
+    const data = window._adoptionExportData;
+    if (!data) return;
+
+    const filterVal = document.getElementById('adoption-city-filter').value;
+    const filtered = (filterVal === 'all') 
+        ? data.exceeded 
+        : data.exceeded.filter(s => s.city === filterVal);
+
     const tbody = document.getElementById('adoption-tbody');
-    tbody.innerHTML = exceeded.map(s => `
+    tbody.innerHTML = filtered.map(s => `
         <tr>
             <td class="td-name">${s.name}</td>
             <td class="td-city">${s.city}</td>
             <td class="td-val" style="color:${getRainfallColor(s.val)}">
-                ${s.val.toFixed(mode === 'max24' ? 1 : 0)}
+                ${s.val.toFixed(data.mode === 'max24' ? 1 : 0)}
             </td>
             <td class="td-time">${formatPeakTime(s.time)}</td>
         </tr>
     `).join('');
 
-    document.getElementById('adoption-empty').style.display = exceeded.length ? 'none' : 'block';
-    document.getElementById('adoption-count').textContent   = `採択基準超過 ${exceeded.length}局`;
-
-    window._adoptionExportData = { exceeded, mode, criteria };
+    document.getElementById('adoption-empty').style.display = filtered.length ? 'none' : 'block';
+    // 絞り込んだ結果の件数を表示
+    document.getElementById('adoption-count').textContent = `採択基準超過 ${filtered.length}局`;
 }
 
 function exportCSV() {
     const data = window._adoptionExportData;
     if (!data || !data.exceeded.length) return;
+
+    // 現在のフィルタ条件を適用して出力
+    const filterVal = document.getElementById('adoption-city-filter').value;
+    const filtered = (filterVal === 'all') 
+        ? data.exceeded 
+        : data.exceeded.filter(s => s.city === filterVal);
+        
+    if (!filtered.length) return;
+
     const modeLabel = data.mode === 'max24' ? '24時間降水量(mm)' : '1時間降水量(mm)';
     const rows = [
         ['観測局名', '市区町村', modeLabel, '記録日時'],
-        ...data.exceeded.map(s => [
+        ...filtered.map(s => [
             s.name, s.city,
             s.val.toFixed(data.mode === 'max24' ? 1 : 0),
             formatPeakTime(s.time)
@@ -685,5 +721,8 @@ function exportCSV() {
     a.click();
     URL.revokeObjectURL(url);
 }
+
+// ドロップダウン変更時にテーブルを再描画
+document.getElementById('adoption-city-filter').addEventListener('change', renderAdoptionTable);
 
 init();

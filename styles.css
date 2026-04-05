@@ -442,8 +442,31 @@ select {
 .criteria-label {
     font-size: 11px;
     opacity: 0.65;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     padding-left: 2px;
+}
+
+.filter-row {
+    margin-bottom: 10px;
+    display: flex;
+}
+
+.city-filter {
+    flex: 1;
+    font-size: 11px;
+    padding: 5px 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+}
+
+.light-theme .city-filter {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+    color: #333;
 }
 
 .panel-actions {
