@@ -69,6 +69,6 @@ app.post('/api/update-data', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`\n🌧  広島県雨量可視化システム`);
+    console.log(`\n🌧  広島県内雨量可視＋`);
     console.log(`   http://localhost:${port}\n`);
 });
