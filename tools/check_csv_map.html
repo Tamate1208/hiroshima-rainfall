@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>観測局 座標 3点照合マップ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Meiryo', sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+    #header { 
+      background: linear-gradient(90deg, #16213e, #0f3460); 
+      padding: 10px 16px; display: flex; align-items: center; gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    #header h1 { font-size: 16px; font-weight: bold; color: #e2b96a; }
+    #stats { display: flex; gap: 12px; font-size: 11px; flex-wrap: wrap; }
+    .stat { padding: 2px 8px; border-radius: 10px; font-weight: bold; border-width: 1px; border-style: solid; }
+    .stat-total { background: #1a2a4a; color: #64b5f6; border-color: #64b5f6; }
+    .stat-ok    { background: #1a4a1a; color: #4caf50; border-color: #4caf50; }
+    .stat-diff  { background: #4a1a1a; color: #f44336; border-color: #f44336; }
+    
+    #controls { 
+      background: #16213e; padding: 6px 16px; display: flex; gap: 12px; align-items: center;
+      font-size: 11px; border-bottom: 1px solid #0f3460; flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid #fff; }
+    .dot-web { background: #4caf50; }
+    .dot-csv { background: #2196f3; }
+    .dot-sys { background: #f44336; }
+    
+    .toggle-btn {
+      padding: 3px 10px; border-radius: 10px; border: 1px solid #0f3460;
+      background: #0f3460; color: #e0e0e0; cursor: pointer; font-size: 10px;
+    }
+    .toggle-btn.active { background: #1565c0; border-color: #64b5f6; color: #fff; }
+    
+    #main-container { flex: 1; display: flex; position: relative; }
+    #map { flex: 1; height: 100%; }
+    
+    #sidebar {
+      width: 320px; background: #16213e; border-left: 1px solid #0f3460;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    #sidebar-header { padding: 12px; border-bottom: 1px solid #0f3460; background: #1a1a2e; }
+    #sidebar-header h3 { color: #e2b96a; font-size: 14px; }
+    #issue-list { flex: 1; overflow-y: auto; padding: 8px; }
+    
+    .issue-item {
+      padding: 8px; margin-bottom: 8px; border-radius: 6px;
+      background: rgba(255,255,255,0.05); border-left: 4px solid #aaa;
+      cursor: pointer; font-size: 12px;
+    }
+    .issue-item:hover { background: rgba(255,255,255,0.1); }
+    .issue-item.severe { border-left-color: #f44336; background: rgba(244,67,54,0.1); }
+    .st-name { font-weight: bold; margin-bottom: 4px; display: block; }
+    .st-dist { display: block; font-size: 11px; opacity: 0.8; }
+    .dist-val { font-weight: bold; color: #f44336; }
+    .match-status { display: inline-block; padding: 1px 4px; border-radius: 3px; font-size: 9px; margin-top: 4px; background: #333; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🗺️ 観測局 3点照合マップ (Web公式 vs 提供CSV vs 現システム)</h1>
+  <div id="stats">
+    <span class="stat stat-total" id="stat-total">Web総数: -</span>
+    <span class="stat stat-ok" id="stat-ok">全一致: -</span>
+    <span class="stat stat-diff" id="stat-sys-diff">システム差異: -</span>
+    <span class="stat stat-diff" id="stat-csv-diff">CSV差異: -</span>
+  </div>
+</div>
+
+<div id="controls">
+  <div class="legend-item"><span class="dot dot-web"></span>Web公式(緑)</div>
+  <div class="legend-item"><span class="dot dot-csv"></span>提供CSV(青)</div>
+  <div class="legend-item"><span class="dot dot-sys"></span>現システム(赤)</div>
+  <button class="toggle-btn active" onclick="toggleLayer('web', this)">WEB</button>
+  <button class="toggle-btn active" onclick="toggleLayer('csv', this)">CSV</button>
+  <button class="toggle-btn active" onclick="toggleLayer('sys', this)">SYS</button>
+  <button class="toggle-btn active" onclick="toggleLayer('lines', this)">差異線</button>
+  <button class="toggle-btn" onclick="toggleLayer('match', this)">一致局を表示</button>
+</div>
+
+<div id="main-container">
+  <div id="map"></div>
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h3>⚠️ 不整合リスト</h3>
+      <p style="font-size: 10px; color: #aaa; margin-top: 4px;">Web公式を基準とした距離(m)</p>
+    </div>
+    <div id="issue-list">読込中...</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// --- Utils ---
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const phi1 = lat1 * Math.PI / 180, phi2 = lat2 * Math.PI / 180;
+  const dphi = (lat2 - lat1) * Math.PI / 180;
+  const dlam = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dphi/2)**2 + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dlam/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function normalize(text) {
+  if (!text) return "";
+  return text.replace(/[（(][^）)]*[）)]/g, '').replace(/[A-Z]E/g, '').replace(/\s/g, '').trim();
+}
+
+// --- Map Initialization ---
+const map = L.map('map').setView([34.4, 132.5], 9);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO'
+}).addTo(map);
+
+const layers = {
+  web: L.layerGroup().addTo(map),
+  csv: L.layerGroup().addTo(map),
+  sys: L.layerGroup().addTo(map),
+  lines: L.layerGroup().addTo(map),
+  match: L.layerGroup()
+};
+
+function toggleLayer(name, btn) {
+  btn.classList.toggle('active');
+  if (btn.classList.contains('active')) map.addLayer(layers[name]);
+  else map.removeLayer(layers[name]);
+}
+
+// --- Data Loading ---
+async function loadAllData() {
+  const [webRes, sysRes, csvRes] = await Promise.all([
+    fetch('rainfallObservatory.json'),
+    fetch('mapping.json'),
+    fetch('県内雨量局.csv')
+  ]);
+
+  const webRaw = await webRes.json();
+  const webItems = webRaw.items || [];
+  const sysItems = await sysRes.json();
+  
+  const csvBuf = await csvRes.arrayBuffer();
+  const csvText = new TextDecoder('shift-jis').decode(csvBuf);
+  const csvLines = csvText.trim().split(/\r?\n/);
+  const csvItems = csvLines.slice(1).map(l => {
+    const p = l.split(',');
+    return { name: p[0], city: p[1], lat: parseFloat(p[2]), lon: parseFloat(p[3]) };
+  }).filter(c => !isNaN(c.lat));
+
+  // Build Lookups
+  const sysLookup = new Map();
+  sysItems.forEach(s => sysLookup.set(normalize(s.city) + '|' + normalize(s.name), s));
+  
+  const csvLookup = new Map();
+  csvItems.forEach(c => csvLookup.set(normalize(c.city) + '|' + normalize(c.name), c));
+
+  let okCount = 0, sysDiffCount = 0, csvDiffCount = 0;
+  const issues = [];
+
+  webItems.forEach(web => {
+    const lat = web.latitude, lon = web.longitude;
+    const name = web.observatoryName, city = web.municipalityName;
+    const key = normalize(city) + '|' + normalize(name);
+
+    const sys = sysLookup.get(key);
+    const csv = csvLookup.get(key);
+
+    const sysDist = sys ? haversine(lat, lon, sys.lat, sys.lon) : null;
+    const csvDist = csv ? haversine(lat, lon, csv.lat, csv.lon) : null;
+
+    const isMatch = (sysDist !== null && sysDist < 100) && (csvDist !== null && csvDist < 100);
+    const targetLayer = isMatch ? layers.match : layers.web;
+
+    // WEB Marker (Official)
+    const webMarker = L.circleMarker([lat, lon], {
+      radius: 6, fillColor: '#4caf50', color: '#fff', weight: 1, fillOpacity: 0.9
+    }).addTo(targetLayer);
+    
+    let popup = `<b>${city} / ${name} (Web公式)</b><br><span style="font-size:10px">ID: ${web.observatoryId}</span><hr>`;
+    
+    if (sys) {
+      if (sysDist >= 100) {
+        sysDiffCount++;
+        L.circleMarker([sys.lat, sys.lon], { radius: 4, fillColor: '#f44336', color: '#fff', weight: 1, fillOpacity: 0.7 }).addTo(layers.sys).bindPopup(`SYS: ${sys.name}<br>Webからの差: ${sysDist.toFixed(0)}m`);
+        L.polyline([[lat, lon], [sys.lat, sys.lon]], { color: '#f44336', weight: 1.5, dashArray: '4,4' }).addTo(layers.lines);
+        popup += `<span style="color:#f44336">現SYS差異: ${sysDist.toFixed(0)}m</span><br>`;
+      }
+    } else {
+      popup += `<span style="color:#aaa">現SYSに未登録</span><br>`;
+    }
+
+    if (csv) {
+      if (csvDist >= 100) {
+        csvDiffCount++;
+        L.circleMarker([csv.lat, csv.lon], { radius: 4, fillColor: '#2196f3', color: '#fff', weight: 1, fillOpacity: 0.7 }).addTo(layers.csv).bindPopup(`CSV: ${csv.name}<br>Webからの差: ${csvDist.toFixed(0)}m`);
+        L.polyline([[lat, lon], [csv.lat, csv.lon]], { color: '#2196f3', weight: 1.5, dashArray: '2,4' }).addTo(layers.lines);
+        popup += `<span style="color:#2196f3">提供CSV差異: ${csvDist.toFixed(0)}m</span><br>`;
+      }
+    }
+
+    webMarker.bindPopup(popup);
+
+    if (isMatch) okCount++;
+    if (sysDist > 100 || csvDist > 100 || !sys || !csv) {
+      issues.push({ web, sysDist, csvDist, severe: (sysDist > 500 || csvDist > 500) });
+    }
+  });
+
+  // UI Update
+  document.getElementById('stat-total').textContent = `Web総数: ${webItems.length}`;
+  document.getElementById('stat-ok').textContent = `全一致: ${okCount}`;
+  document.getElementById('stat-sys-diff').textContent = `システム差異: ${sysDiffCount}`;
+  document.getElementById('stat-csv-diff').textContent = `CSV差異: ${csvDiffCount}`;
+
+  const list = document.getElementById('issue-list');
+  list.innerHTML = issues.sort((a,b) => Math.max(b.sysDist||0, b.csvDist||0) - Math.max(a.sysDist||0, a.csvDist||0)).map(iss => {
+    return `<div class="issue-item ${iss.severe?'severe':''}" onclick="map.setView([${iss.web.latitude},${iss.web.longitude}], 14)">
+      <span class="st-name">${iss.web.municipalityName} / ${iss.web.observatoryName}</span>
+      <span class="st-dist">SYS: <span class="dist-val">${iss.sysDist !== null ? iss.sysDist.toFixed(0)+'m' : '未登録'}</span></span>
+      <span class="st-dist">CSV: <span class="dist-val">${iss.csvDist !== null ? iss.csvDist.toFixed(0)+'m' : '未登録'}</span></span>
+    </div>`;
+  }).join('');
+}
+
+loadAllData().catch(console.error);
+</script>
+</body>
+</html>

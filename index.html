@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>広島県雨量可視化システム | Hiroshima Rainfall Monitor</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Outfit:wght@500;800&display=swap"
+        rel="stylesheet">
+    <script type="importmap">
+    {
+      "imports": {
+        "@turf/turf": "https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/+esm"
+      }
+    }
+    </script>
+</head>
+
+<body>
+    <div id="map"></div>
+    <div id="data-alert" class="overlay center-alert">
+        <div class="glass alert-content">
+            <span class="alert-icon">⚠️</span>
+            <span id="alert-message">24時間分のデータが揃っていないため、最大雨量は表示されません。</span>
+        </div>
+    </div>
+
+    <div class="overlay top-left">
+        <header>
+            <h1>広島県雨量観測プラス</h1>
+            <p id="current-date">2026年3月14日</p>
+        </header>
+        <div class="stats">
+            <div class="stat-item">
+                <span class="label">地図テーマ</span>
+                <select id="theme-selector" title="地図テーマを選択">
+                    <option value="dark">ダークモード</option>
+                    <option value="light">標準表示 (ライト)</option>
+                </select>
+            </div>
+            <div class="stat-item">
+                <span class="label">表示モード</span>
+                <select id="mode-selector" title="表示モードを選択">
+                    <option value="current">リアルタイム表示 (60分降水量)</option>
+                    <option value="max60">期間中最大60分降水量</option>
+                    <option value="max24">期間中最大24時間降水量</option>
+                </select>
+            </div>
+            <div class="stat-item date-picker">
+                <span class="label">期間設定</span>
+                <div class="date-inputs">
+                    <input type="date" id="start-date" title="開始日" value="2026-03-14">
+                    <span>～</span>
+                    <input type="date" id="end-date" title="終了日" value="2026-03-14">
+                </div>
+                <button id="update-data" class="btn-small">データ更新</button>
+                <span id="update-status" class="update-status"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay bottom-center">
+        <div class="controls glass">
+            <button id="play-pause">Play</button>
+            <div class="timeline-container">
+                <input type="range" id="timeline" min="0" max="143" value="143" title="時間軸を選択">
+                <div class="time-label" id="time-display">23:50</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="legend glass">
+        <h3>降水量 (mm)</h3>
+        <div class="legend-scale">
+            <div class="scale-item"><span id="bg-rain-0"></span> 0-1</div>
+            <div class="scale-item"><span id="bg-rain-1"></span> 1-10</div>
+            <div class="scale-item"><span id="bg-rain-10"></span> 10-20</div>
+            <div class="scale-item"><span id="bg-rain-20"></span> 20-30</div>
+            <div class="scale-item"><span id="bg-rain-30"></span> 30-50</div>
+            <div class="scale-item"><span id="bg-rain-50"></span> 50+</div>
+        </div>
+    </div>
+
+    <!-- 採択基準超過局パネル (フェーズ3) -->
+    <div id="adoption-panel" class="overlay top-right adoption-panel-hidden">
+        <div class="glass adoption-glass">
+            <div class="panel-header">
+                <div class="panel-title-row">
+                    <span class="panel-icon">🔴</span>
+                    <h3 id="adoption-count">採択基準超過 0局</h3>
+                </div>
+                <div id="adoption-criteria-label" class="criteria-label"></div>
+                <div class="panel-actions">
+                    <button id="export-csv" class="btn-small btn-export">CSV出力</button>
+                    <button id="toggle-panel" class="btn-small btn-toggle">▲ 閉じる</button>
+                </div>
+            </div>
+            <div id="panel-body">
+                <div class="table-wrap">
+                    <table id="adoption-table">
+                        <thead>
+                            <tr>
+                                <th>観測局</th>
+                                <th>市区町村</th>
+                                <th>雨量</th>
+                                <th>記録日時</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adoption-tbody"></tbody>
+                    </table>
+                </div>
+                <p id="adoption-empty" class="adoption-empty-msg">採択基準を超過した観測局はありません</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>

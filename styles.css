@@ -1,0 +1,549 @@
+:root {
+    --glass-bg: rgba(20, 20, 25, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --accent: #4a90e2;
+    --text: #ffffff;
+    --danger: #ff4d4d;
+    --name-size: 9px;
+    --value-size: 11px;
+    
+    /* Light Theme Variables */
+    --light-bg: #f8f9fa;
+    --light-glass: rgba(255, 255, 255, 0.7);
+    --light-text: #212529;
+    --light-border: rgba(0, 0, 0, 0.1);
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: 'Inter', sans-serif;
+    color: var(--text);
+    overflow: hidden;
+    background: #0a0a0c;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+.overlay {
+    position: absolute;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.overlay > * {
+    pointer-events: auto;
+}
+
+.top-left {
+    top: 20px;
+    left: 20px;
+}
+
+.bottom-center {
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    max-width: 800px;
+}
+
+header h1 {
+    margin: 0;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    font-size: 24px;
+    letter-spacing: -0.5px;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+header p {
+    margin: 5px 0 20px 0;
+    opacity: 0.7;
+    font-size: 14px;
+}
+
+.glass {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+/* Light Theme Overrides */
+.light-theme #map {
+    filter: none;
+}
+
+.light-theme .glass {
+    background: rgba(255, 255, 255, 0.85);
+    border-color: var(--light-border);
+    color: var(--light-text);
+}
+
+.light-theme header p,
+.light-theme .label,
+.light-theme .update-status {
+    color: var(--light-text);
+    opacity: 0.8;
+}
+
+.light-theme select,
+.light-theme .date-inputs input {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: var(--light-border);
+    color: var(--light-text);
+}
+
+.light-theme .station-name {
+    background: rgba(255, 255, 255, 0.8);
+    color: #333;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.light-theme .value-display {
+    /* Light mode: Black outline for better contrast on OSM */
+    text-shadow: 
+        -1px -1px 0 #000, 
+         1px -1px 0 #000, 
+        -1px  1px 0 #000, 
+         1px  1px 0 #000;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:hover {
+    transform: scale(1.05);
+    background: #5ba1f3;
+}
+
+.timeline-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+input[type="range"] {
+    width: 100%;
+    background: rgba(255,255,255,0.1);
+    height: 6px;
+    border-radius: 3px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.time-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    text-align: right;
+    min-width: 100px;
+}
+
+.legend {
+    position: absolute;
+    bottom: 30px;
+    right: 20px;
+    z-index: 1000;
+    padding: 15px;
+    font-size: 12px;
+}
+
+.legend h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+.scale-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.scale-item span {
+    width: 20px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+/* Legend Colors */
+#bg-rain-0  { background: #ffffff; }
+#bg-rain-1  { background: #3399ff; }
+#bg-rain-10 { background: #00ddcc; }
+#bg-rain-20 { background: #ffff00; }
+#bg-rain-30 { background: #ff9900; }
+#bg-rain-50 { background: #ff0033; }
+
+.雨量-red {
+    color: var(--danger);
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(255,0,0,0.5);
+}
+
+select {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    outline: none;
+}
+
+.date-picker {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.date-inputs input {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid var(--glass-border);
+    color: white;
+    padding: 3px 5px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+    align-self: flex-start;
+}
+
+.update-status {
+    font-size: 11px;
+    opacity: 0.7;
+    min-height: 16px;
+    display: block;
+}
+
+/* Station Label Styling */
+.station-label {
+    background: none;
+    border: none;
+    box-shadow: none;
+    pointer-events: auto;
+}
+
+.station-bubble {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+}
+
+.station-name {
+    font-size: var(--name-size);
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(0, 0, 0, 0.5);
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-bottom: 0;
+    font-family: 'Inter', sans-serif;
+    line-height: 1.3;
+}
+
+.value-display {
+    font-size: var(--value-size);
+    font-weight: 800;
+    text-shadow: none;
+    font-family: 'Outfit', sans-serif;
+    transition: color 0.3s ease;
+}
+
+/* Isoline tooltip */
+.isoline-label {
+    background: rgba(20,20,25,0.85);
+    border: none;
+    color: white;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+    white-space: nowrap;
+}
+
+/* Inline isoline value labels */
+.isoline-value-label {
+    background: none;
+    border: none;
+    box-shadow: none;
+    pointer-events: none;
+}
+
+.isoline-value-label span {
+    font-family: 'Outfit', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    text-shadow: 0 0 4px rgba(0,0,0,1), 0 0 8px rgba(0,0,0,0.9);
+    white-space: nowrap;
+}
+
+/* Data Alert Overlay */
+#data-alert {
+    display: none;
+}
+
+.center-alert {
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    max-width: 90%;
+}
+
+.alert-content {
+    border-color: var(--accent);
+    background: rgba(74, 144, 226, 0.1); /* Subtle blue tint */
+    border-width: 1px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.alert-icon {
+    font-size: 20px;
+}
+
+#alert-message {
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #fff;
+    text-align: left;
+}
+
+.light-theme #alert-message {
+    color: var(--light-text);
+}
+
+/* Custom Leaflet Tooltip */
+.leaflet-tooltip-pane .leaflet-tooltip {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.leaflet-tooltip-top:before {
+    border-top-color: var(--glass-border);
+}
+
+.light-theme .leaflet-tooltip {
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--light-text);
+    border-color: var(--light-border);
+}
+
+/* ================================================================
+   採択基準超過局パネル (フェーズ3)
+================================================================ */
+
+.top-right {
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    max-height: calc(100vh - 40px);
+}
+
+.adoption-glass {
+    padding: 14px 16px;
+    max-height: calc(100vh - 60px);
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.adoption-panel-hidden {
+    display: none;
+}
+
+.panel-header {
+    flex-shrink: 0;
+    margin-bottom: 10px;
+}
+
+.panel-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.panel-title-row h3 {
+    margin: 0;
+    font-size: 14px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 800;
+    color: #ff4500;
+    line-height: 1.2;
+}
+
+.panel-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.criteria-label {
+    font-size: 11px;
+    opacity: 0.65;
+    margin-bottom: 10px;
+    padding-left: 2px;
+}
+
+.panel-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-export {
+    background: #c73a00;
+}
+
+.btn-export:hover {
+    background: #e64200;
+}
+
+.btn-toggle {
+    background: rgba(255, 255, 255, 0.12);
+    font-size: 11px;
+    padding: 6px 10px;
+}
+
+.btn-toggle:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.table-wrap {
+    overflow-y: auto;
+    max-height: calc(100vh - 240px);
+    border-radius: 6px;
+    flex: 1;
+}
+
+#adoption-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#adoption-table thead th {
+    position: sticky;
+    top: 0;
+    background: rgba(15, 15, 20, 0.97);
+    padding: 5px 6px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.7;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    white-space: nowrap;
+}
+
+#adoption-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.12s;
+}
+
+#adoption-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+#adoption-table td {
+    padding: 5px 6px;
+    vertical-align: middle;
+}
+
+.td-name { font-weight: 600; font-size: 12px; }
+.td-city { opacity: 0.55; font-size: 11px; }
+.td-val  { font-weight: 800; font-family: 'Outfit', sans-serif; font-size: 13px; text-align: right; }
+.td-time { font-size: 11px; opacity: 0.75; white-space: nowrap; }
+
+.adoption-empty-msg {
+    display: none;
+    text-align: center;
+    opacity: 0.6;
+    font-size: 13px;
+    padding: 10px 0;
+}
+
+/* Light theme overrides for panel */
+.light-theme #adoption-table thead th {
+    background: rgba(235, 235, 240, 0.98);
+    color: #333;
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.light-theme .panel-title-row h3 {
+    color: #c73a00;
+}
+
+/* ================================================================
+   採択基準等雨量線の強調 (フェーズ1)
+================================================================ */
+
+.criteria-isoline {
+    animation: criteria-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes criteria-pulse {
+    0%, 100% { opacity: 1.0; }
+    50%       { opacity: 0.45; }
+}

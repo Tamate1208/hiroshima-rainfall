@@ -1,0 +1,16 @@
+# Node.js
+node_modules/
+
+# ダウンロードキャッシュ（自動生成）
+temp_downloads/
+
+# デバッグ用一時スクリプト
+tmp/
+
+# 環境変数ファイル
+.env
+.env.*
+
+# OS 生成ファイル
+.DS_Store
+Thumbs.db
