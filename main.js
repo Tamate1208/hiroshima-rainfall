@@ -650,7 +650,7 @@ function updateAdoptionPanel(mode) {
         .filter(s => s.val !== null && s.val >= criteria)
         .sort((a, b) => b.val - a.val);
 
-    // 市区町村タグボタンの動的生成
+    // 市区町村チェックボックスリストの動的生成
     const filterContainer = document.getElementById('adoption-city-filter-container');
     const cities = [...new Set(exceeded.map(s => s.city))].sort();
     
@@ -665,21 +665,29 @@ function updateAdoptionPanel(mode) {
     }
 
     filterContainer.innerHTML = '';
+    filterContainer.className = 'checkbox-list-container';
+
     cities.forEach(c => {
-        const btn = document.createElement('div');
-        btn.className = `city-tag ${window._selectedCities.has(c) ? 'active' : ''}`;
-        btn.textContent = c;
-        btn.addEventListener('click', () => {
-            if (window._selectedCities.has(c)) {
-                window._selectedCities.delete(c);
-                btn.classList.remove('active');
-            } else {
+        const label = document.createElement('label');
+        label.className = 'city-checkbox-label';
+        
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = c;
+        cb.checked = window._selectedCities.has(c);
+        
+        cb.addEventListener('change', (e) => {
+            if (e.target.checked) {
                 window._selectedCities.add(c);
-                btn.classList.add('active');
+            } else {
+                window._selectedCities.delete(c);
             }
             renderAdoptionTable();
         });
-        filterContainer.appendChild(btn);
+        
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' ' + c));
+        filterContainer.appendChild(label);
     });
 
     window._adoptionExportData = { exceeded, mode, criteria };

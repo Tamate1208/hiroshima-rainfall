@@ -451,50 +451,36 @@ select {
     display: flex;
 }
 
-.city-filter-container {
+.checkbox-list-container {
+    max-height: 85px;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 6px 10px;
+    border-radius: 4px;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px 12px;
 }
 
-.city-tag {
+.city-checkbox-label {
     font-size: 11px;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    border-radius: 12px;
     cursor: pointer;
-    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     -webkit-user-select: none;
     user-select: none;
 }
 
-.city-tag:hover {
-    background: rgba(255, 255, 255, 0.2);
+.city-checkbox-label input {
+    margin: 0;
+    cursor: pointer;
 }
 
-.city-tag.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-    font-weight: bold;
-}
-
-.light-theme .city-tag {
-    background: rgba(0, 0, 0, 0.05);
+.light-theme .checkbox-list-container {
+    background: rgba(0, 0, 0, 0.03);
     border-color: rgba(0, 0, 0, 0.1);
-    color: #333;
-}
-
-.light-theme .city-tag:hover {
-    background: rgba(0, 0, 0, 0.08);
-}
-
-.light-theme .city-tag.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
 }
 
 .panel-actions {
