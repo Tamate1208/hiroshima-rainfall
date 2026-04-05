@@ -451,22 +451,50 @@ select {
     display: flex;
 }
 
-.city-filter {
-    flex: 1;
+.city-filter-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.city-tag {
     font-size: 11px;
-    padding: 5px 8px;
+    padding: 4px 10px;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: white;
-    border-radius: 4px;
-    outline: none;
+    border-radius: 12px;
     cursor: pointer;
+    transition: all 0.2s;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
-.light-theme .city-filter {
+.city-tag:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.city-tag.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    font-weight: bold;
+}
+
+.light-theme .city-tag {
     background: rgba(0, 0, 0, 0.05);
     border-color: rgba(0, 0, 0, 0.1);
     color: #333;
+}
+
+.light-theme .city-tag:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.light-theme .city-tag.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
 }
 
 .panel-actions {

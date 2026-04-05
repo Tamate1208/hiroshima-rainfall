@@ -342,6 +342,10 @@ async function init() {
     document.getElementById('end-date').value = todayStr;
     document.getElementById('current-date').innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+    document.getElementById('start-date').addEventListener('change', (e) => {
+        document.getElementById('end-date').value = e.target.value;
+    });
+
     await loadData();
 
     document.getElementById('timeline').addEventListener('input', (e) => updateFrame(timestamps[e.target.value]));
@@ -646,20 +650,37 @@ function updateAdoptionPanel(mode) {
         .filter(s => s.val !== null && s.val >= criteria)
         .sort((a, b) => b.val - a.val);
 
-    // 市区町村プルダウンの動的生成
-    const filterSelect = document.getElementById('adoption-city-filter');
-    const currentVal = filterSelect.value;
+    // 市区町村タグボタンの動的生成
+    const filterContainer = document.getElementById('adoption-city-filter-container');
     const cities = [...new Set(exceeded.map(s => s.city))].sort();
     
-    filterSelect.innerHTML = '<option value="all">すべての市町</option>' + 
-        cities.map(c => `<option value="${c}">${c}</option>`).join('');
-    
-    // 現在の選択値を維持、該当しなければ「すべて」に戻す
-    if (cities.includes(currentVal)) {
-        filterSelect.value = currentVal;
+    // 選択状態の初期化
+    if (!window._selectedCities) {
+        window._selectedCities = new Set();
     } else {
-        filterSelect.value = 'all';
+        // 現在のデータに存在しない市町は選択から外す
+        window._selectedCities.forEach(c => {
+            if (!cities.includes(c)) window._selectedCities.delete(c);
+        });
     }
+
+    filterContainer.innerHTML = '';
+    cities.forEach(c => {
+        const btn = document.createElement('div');
+        btn.className = `city-tag ${window._selectedCities.has(c) ? 'active' : ''}`;
+        btn.textContent = c;
+        btn.addEventListener('click', () => {
+            if (window._selectedCities.has(c)) {
+                window._selectedCities.delete(c);
+                btn.classList.remove('active');
+            } else {
+                window._selectedCities.add(c);
+                btn.classList.add('active');
+            }
+            renderAdoptionTable();
+        });
+        filterContainer.appendChild(btn);
+    });
 
     window._adoptionExportData = { exceeded, mode, criteria };
     renderAdoptionTable();
@@ -669,10 +690,11 @@ function renderAdoptionTable() {
     const data = window._adoptionExportData;
     if (!data) return;
 
-    const filterVal = document.getElementById('adoption-city-filter').value;
-    const filtered = (filterVal === 'all') 
-        ? data.exceeded 
-        : data.exceeded.filter(s => s.city === filterVal);
+    // 1つ以上選択されていれば絞り込み、0個ならすべて表示とする
+    const activeCities = window._selectedCities;
+    const filtered = (activeCities && activeCities.size > 0) 
+        ? data.exceeded.filter(s => activeCities.has(s.city))
+        : data.exceeded;
 
     const tbody = document.getElementById('adoption-tbody');
     tbody.innerHTML = filtered.map(s => `
@@ -687,19 +709,22 @@ function renderAdoptionTable() {
     `).join('');
 
     document.getElementById('adoption-empty').style.display = filtered.length ? 'none' : 'block';
+    
     // 絞り込んだ結果の件数を表示
-    document.getElementById('adoption-count').textContent = `採択基準超過 ${filtered.length}局`;
+    // フィルタが有効（1つ以上の市町が選択されている場合）は「絞り込み該当」と表示
+    const prefix = (activeCities && activeCities.size > 0) ? '選択地域: 基準超過' : '採択基準超過';
+    document.getElementById('adoption-count').textContent = `${prefix} ${filtered.length}局`;
 }
 
 function exportCSV() {
     const data = window._adoptionExportData;
     if (!data || !data.exceeded.length) return;
 
-    // 現在のフィルタ条件を適用して出力
-    const filterVal = document.getElementById('adoption-city-filter').value;
-    const filtered = (filterVal === 'all') 
-        ? data.exceeded 
-        : data.exceeded.filter(s => s.city === filterVal);
+    // 現在の複数フィルタ条件を適用して出力
+    const activeCities = window._selectedCities;
+    const filtered = (activeCities && activeCities.size > 0) 
+        ? data.exceeded.filter(s => activeCities.has(s.city))
+        : data.exceeded;
         
     if (!filtered.length) return;
 
@@ -721,8 +746,5 @@ function exportCSV() {
     a.click();
     URL.revokeObjectURL(url);
 }
-
-// ドロップダウン変更時にテーブルを再描画
-document.getElementById('adoption-city-filter').addEventListener('change', renderAdoptionTable);
 
 init();
