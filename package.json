@@ -16,15 +16,9 @@
     "@turf/turf": "^7.3.4",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
-    "d3-array": "^3.2.4",
-    "d3-contour": "^4.0.2",
     "express": "^5.2.1",
-    "iconv-lite": "^0.7.2",
     "leaflet": "^1.9.4",
-    "leaflet-heatmap": "^1.0.0",
-    "leaflet-velocity": "^2.1.4",
     "vite": "^8.0.0",
-    "xlsx": "^0.18.5",
-    "xml2js": "^0.6.2"
+    "xlsx": "^0.18.5"
   }
 }

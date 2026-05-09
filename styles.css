@@ -7,12 +7,31 @@
     --name-size: 9px;
     --value-size: 11px;
     
+    /* Water Level Theme Variables */
+    --level-normal: #00ddcc;
+    --level-standby: #ffff00;
+    --level-warning: #ff9900;
+    --level-evacuation: #ff0033;
+    --level-danger: #9900cc;
+
     /* Light Theme Variables */
     --light-bg: #f8f9fa;
     --light-glass: rgba(255, 255, 255, 0.7);
     --light-text: #212529;
     --light-border: rgba(0, 0, 0, 0.1);
 }
+
+/* スクリーンリーダー専用 (視覚的に非表示・アクセシビリティ用) */
+.sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+    border: 0;
+}
+
 
 body, html {
     margin: 0;
@@ -210,6 +229,17 @@ input[type="range"]::-webkit-slider-thumb {
 #bg-rain-20 { background: #ffff00; }
 #bg-rain-30 { background: #ff9900; }
 #bg-rain-50 { background: #ff0033; }
+
+/* Water Level Legend Colors */
+#bg-wl-normal     { background: var(--level-normal); }
+#bg-wl-standby    { background: var(--level-standby); }
+#bg-wl-warning    { background: var(--level-warning); }
+#bg-wl-evacuation { background: var(--level-evacuation); }
+#bg-wl-danger     { background: var(--level-danger); }
+
+.legend-hidden {
+    display: none !important;
+}
 
 .雨量-red {
     color: var(--danger);
@@ -664,6 +694,64 @@ select {
 .date-inputs input, select {
     padding: 6px 10px;
 }
+
+/* 横並びレイアウト (等雨量線トグルなど) */
+.stat-item--row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* トグルスイッチ */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.toggle-knob {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 22px;
+    transition: background 0.25s;
+}
+
+.toggle-knob::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    left: 3px;
+    top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.25s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+.toggle-switch input:checked + .toggle-knob {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-knob::before {
+    transform: translateX(18px);
+}
+
+.light-theme .toggle-knob {
+    background: rgba(0, 0, 0, 0.15);
+}
+
 /* ================================================================
    レスポンシブデザイン (モバイル向け調整)
 ================================================================ */
@@ -762,4 +850,69 @@ select {
     .table-wrap {
         max-height: calc(50vh - 80px);
     }
+}
+
+/* ================================================================
+   グラフモーダル (フェーズ4)
+================================================================ */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.modal-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 800px;
+    height: 70vh;
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    transform: scale(1);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modal-hidden .modal-content {
+    transform: scale(0.9);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-family: 'Outfit', sans-serif;
+    font-size: 18px;
+    color: var(--text);
+}
+
+.light-theme .modal-header h3 {
+    color: var(--light-text);
+}
+
+.chart-container {
+    flex-grow: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
 }

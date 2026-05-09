@@ -11,15 +11,17 @@ let diagnosticData = { rawRows: {} };
 const PROJECT_ROOT = __dirname;
 const MAPPING_FILE = path.join(PROJECT_ROOT, 'mapping.json');
 const OUTPUT_FILE  = path.join(PROJECT_ROOT, 'rainfall_data.json');
+const WATERLEVEL_MAPPING = path.join(PROJECT_ROOT, 'waterlevel_mapping.json');
+const WATERLEVEL_OUTPUT  = path.join(PROJECT_ROOT, 'waterlevel_data.json');
 const DOWNLOAD_DIR = path.join(PROJECT_ROOT, 'temp_downloads');
 
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
 
-async function downloadFile(dateStr) {
+async function downloadFile(dateStr, type = 'uryo') {
     const year = dateStr.substring(0, 4);
     const month = dateStr.substring(4, 6);
-    const url = `https://www.bousai.pref.hiroshima.lg.jp/data/observation/${year}/${month}/${dateStr}-uryo.xlsx`;
-    const dest = path.join(DOWNLOAD_DIR, `${dateStr}-uryo.xlsx`);
+    const url = `https://www.bousai.pref.hiroshima.lg.jp/data/observation/${year}/${month}/${dateStr}-${type}.xlsx`;
+    const dest = path.join(DOWNLOAD_DIR, `${dateStr}-${type}.xlsx`);
 
     if (fs.existsSync(dest)) {
         const day = parseInt(dateStr.substring(6, 8));
@@ -57,7 +59,7 @@ async function processRange(startDateStr, endDateStr) {
     const filePaths = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const dateStr = d.toISOString().split('T')[0].replace(/-/g, '');
-        const filePath = await downloadFile(dateStr);
+        const filePath = await downloadFile(dateStr, 'uryo');
         if (filePath) filePaths.push(filePath);
     }
 
@@ -118,7 +120,8 @@ async function processRange(startDateStr, endDateStr) {
         const values = allValues[row] || [];
         stationMaxes[row] = { 
             max60: null, max60Raw: null, max24: null, max24Raw: null, 
-            max60Time: '', max60RawTime: '', max24Time: '', max24RawTime: '' 
+            max60Time: '', max60RawTime: '', max24Time: '', max24RawTime: '',
+            cumulative: null, cumulativeRaw: null
         };
 
         for (let i = 0; i < values.length; i++) {
@@ -171,6 +174,13 @@ async function processRange(startDateStr, endDateStr) {
                     stationMaxes[row].max24Time = ts;
                 }
             }
+        }
+
+        const allValid = values.filter(v => v !== null);
+        if (allValid.length > 0) {
+            const rawSum = allValid.reduce((a, b) => a + b, 0);
+            stationMaxes[row].cumulativeRaw = rawSum;
+            stationMaxes[row].cumulative = Math.round((rawSum * (values.length / allValid.length)) * 10) / 10;
         }
     });
 
@@ -232,6 +242,8 @@ async function processRange(startDateStr, endDateStr) {
                 stationMaxes[row].max60Raw = null;
                 stationMaxes[row].max24 = null;
                 stationMaxes[row].max24Raw = null;
+                stationMaxes[row].cumulative = null;
+                stationMaxes[row].cumulativeRaw = null;
                 stationMaxes[row].max60Time = '';
                 stationMaxes[row].max60RawTime = '';
                 stationMaxes[row].max24Time = '';
@@ -253,6 +265,124 @@ async function processRange(startDateStr, endDateStr) {
     console.log(`Success! Data written to ${OUTPUT_FILE}`);
 }
 
-const start = process.argv[2] || '2026-03-31';
-const end = process.argv[3] || start;
-processRange(start, end).catch(console.error);
+async function processWaterlevelRange(startDateStr, endDateStr) {
+    if (!fs.existsSync(WATERLEVEL_MAPPING)) {
+        console.warn("waterlevel_mapping.json is missing, skipping water level processing.");
+        return;
+    }
+    const mapping = JSON.parse(fs.readFileSync(WATERLEVEL_MAPPING, 'utf8'));
+    const timeSeries = {};
+
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+
+    const filePaths = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = d.toISOString().split('T')[0].replace(/-/g, '');
+        const filePath = await downloadFile(dateStr, 'suii');
+        if (filePath) filePaths.push(filePath);
+    }
+
+    if (filePaths.length === 0) {
+        console.error("No valid water level files found.");
+        return;
+    }
+
+    filePaths.forEach(filePath => {
+        const fileName = path.basename(filePath);
+        const dateStr = fileName.split('-')[0];
+        console.log(`Processing Waterlevel: ${fileName}`);
+        
+        const workbook = XLSX.readFile(filePath);
+        const sheetNames = ['水位正時表', '水位定時表1', '水位定時表2', '水位定時表3', '水位定時表4'];
+        
+        const dayData = {};
+        mapping.forEach(s => dayData[s.row] = new Array(144).fill(null));
+
+        sheetNames.forEach((sheetName) => {
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) return;
+            
+            // 水位定時表1〜4 のデータ取得（シートが正時表でない場合）
+            if (sheetName.includes('定時表')) {
+                const sidx = parseInt(sheetName.replace('水位定時表', '')) - 1;
+                for (let r = 4; r <= 1000; r++) {
+                    if (dayData[r] === undefined) continue;
+                    // C〜F列(2〜5)は基準値(水防団待機, 注意, 避難, 危険)のためスキップ
+                    // データはG列(c=6)から36個分（10分×6時間=36）
+                    for (let c = 6; c <= 41; c++) {
+                        const cellAddress = XLSX.utils.encode_cell({r: r-1, c: c});
+                        const cell = sheet[cellAddress];
+                        const val = cell && !isNaN(parseFloat(cell.v)) ? parseFloat(cell.v) : null;
+                        
+                        const slotIndex = (sidx * 36) + (c - 6);
+                        if (slotIndex < 144) dayData[r][slotIndex] = val;
+                    }
+                }
+            }
+        });
+
+        // タイムスタンプと合わせて timeSeries を構築
+        for (let i = 0; i < 144; i++) {
+            const h = Math.floor((i + 1) * 10 / 60);
+            const m = ((i + 1) * 10) % 60;
+            const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+            const ts = (timeStr === '24:00') ? `${dateStr} 23:59` : `${dateStr} ${timeStr}`;
+            
+            if (!timeSeries[ts]) timeSeries[ts] = {};
+            mapping.forEach(station => {
+                if (station.row !== undefined) {
+                    timeSeries[ts][station.name] = dayData[station.row][i];
+                }
+            });
+        }
+    });
+
+    // 未来の時間を削除
+    const nowJST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const nowDateStr = nowJST.toISOString().replace('T', ' ').substring(0, 16).replace(/-/g, '');
+    Object.keys(timeSeries).forEach(ts => {
+        if (ts > nowDateStr) delete timeSeries[ts];
+    });
+
+    const summary = mapping.map(s => ({
+        maxPeriod: null,
+        maxPeriodTime: ""
+    }));
+
+    Object.keys(timeSeries).sort().forEach(ts => {
+        mapping.forEach((station, idx) => {
+            const val = timeSeries[ts][station.name];
+            if (val !== null && val !== undefined) {
+                if (summary[idx].maxPeriod === null || val > summary[idx].maxPeriod) {
+                    summary[idx].maxPeriod = val;
+                    summary[idx].maxPeriodTime = ts;
+                }
+            }
+        });
+    });
+
+    const output = {
+        mapping: mapping,
+        timeSeries: timeSeries,
+        summary: summary,
+        range: { start: startDateStr, end: endDateStr }
+    };
+
+    fs.writeFileSync(WATERLEVEL_OUTPUT, JSON.stringify(output, null, 2), 'utf8');
+    console.log(`Updated ${WATERLEVEL_OUTPUT} (${Object.keys(timeSeries).length} timestamps)`);
+}
+
+async function main() {
+    const start = process.argv[2] || '2026-03-31';
+    const end = process.argv[3] || start;
+    
+    try {
+        await processRange(start, end);
+        await processWaterlevelRange(start, end);
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+main();

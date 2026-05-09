@@ -4,6 +4,11 @@
 import * as turf from "@turf/turf";
 
 let map, rainfallData, markers = [];
+let waterlevelData = null;
+let riverGeoJson = null;
+let currentDataType = 'rainfall';
+let riverLayer = null;
+
 let baseLayer;
 let currentTimestamp;
 let timestamps = [];
@@ -13,14 +18,16 @@ let playInterval = null;
 const ADOPTION_CRITERIA = {
     max24: 80,    // mm/24h — 公共土木・農地等
     max60: 20,    // mm/1h
-    current: null // リアルタイムモードは基準なし
+    current: null, // リアルタイムモードは基準なし
+    cumulative: null // 累積雨量モードは基準なし
 };
 
 // モード別の等雨量線閾値セット
 const THRESHOLDS_BY_MODE = {
     current: [1, 5, 10, 20],
     max60:   [1, 5, 10, 20, 30, 50],
-    max24:   [10, 20, 50, 80, 100, 150, 200, 250]
+    max24:   [10, 20, 50, 80, 100, 150, 200, 250],
+    cumulative: [10, 50, 100, 200, 300, 400, 500]
 };
 
 // Grid configuration (100x80 for higher quality contours)
@@ -333,6 +340,46 @@ async function init() {
         else document.body.classList.remove('light-theme');
     });
 
+    document.getElementById('datatype-selector').addEventListener('change', (e) => {
+        currentDataType = e.target.value;
+        
+        // パネルUI切り替え
+        document.getElementById('legend-rainfall').classList.toggle('legend-hidden', currentDataType !== 'rainfall');
+        document.getElementById('legend-waterlevel').classList.toggle('legend-hidden', currentDataType !== 'waterlevel');
+        document.getElementById('panel-icon').textContent = currentDataType === 'waterlevel' ? '🌊' : '🔴';
+        
+        const modeSelector = document.getElementById('mode-selector');
+        modeSelector.innerHTML = currentDataType === 'rainfall' ? `
+            <option value="current">リアルタイム表示 (60分降水量)</option>
+            <option value="max60">期間中最大60分降水量</option>
+            <option value="max24">期間中最大24時間降水量</option>
+            <option value="cumulative">期間中累加雨量 (総雨量)</option>
+        ` : `
+            <option value="current">リアルタイム水位</option>
+            <option value="maxPeriod">期間内最高水位</option>
+        `;
+        
+        // タイムラインやデータを切り替え
+        const activeData = currentDataType === 'rainfall' ? rainfallData : waterlevelData;
+        if (activeData && activeData.timeSeries) {
+            timestamps = Object.keys(activeData.timeSeries).sort();
+            const tl = document.getElementById('timeline');
+            tl.max = timestamps.length - 1;
+            
+            // タイムラインの現在位置が新しい配列長を超えないように調整
+            tl.value = Math.min(tl.value, timestamps.length - 1);
+            if (timestamps[tl.value]) {
+                updateFrame(timestamps[tl.value]);
+            }
+        } else {
+            // データ未取得などのときはクリア
+            markers.forEach(m => map.removeLayer(m));
+            if (isolineLayer) map.removeLayer(isolineLayer);
+            if (fillOverlay) map.removeLayer(fillOverlay);
+            if (riverLayer) map.removeLayer(riverLayer);
+        }
+    });
+
     const now = new Date();
     const todayStr = now.getFullYear() + '-' + 
                     String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -420,6 +467,13 @@ async function init() {
             btn.style.fontSize = '12px';
         }
     });
+
+    // グラフモーダルの閉じる処理
+    const closeModal = () => document.getElementById('chart-modal').classList.add('modal-hidden');
+    document.getElementById('close-chart-modal').addEventListener('click', closeModal);
+    document.getElementById('chart-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'chart-modal') closeModal();
+    });
 }
 
 function updateZoomStyles() {
@@ -433,11 +487,45 @@ function updateZoomStyles() {
 async function loadData() {
     const res = await fetch('./rainfall_data.json?t=' + Date.now());
     rainfallData = await res.json();
-    timestamps = Object.keys(rainfallData.timeSeries).sort();
-    const tl = document.getElementById('timeline');
-    tl.max = timestamps.length - 1;
-    tl.value = timestamps.length - 1;
-    updateFrame(timestamps[timestamps.length - 1]);
+    
+    try {
+        const resWater = await fetch('./waterlevel_data.json?t=' + Date.now());
+        waterlevelData = await resWater.json();
+    } catch(e) { console.warn("Water level data unavailable."); }
+
+    try {
+        const resRiver = await fetch('./rivers.geojson?t=' + Date.now());
+        riverGeoJson = await resRiver.json();
+    } catch(e) { console.warn("Rivers GeoJSON unavailable."); }
+
+    // 初期化時は雨量とする
+    if (currentDataType === 'rainfall' && rainfallData) {
+        timestamps = Object.keys(rainfallData.timeSeries).sort();
+        const tl = document.getElementById('timeline');
+        tl.max = timestamps.length - 1;
+        tl.value = timestamps.length - 1;
+        updateFrame(timestamps[timestamps.length - 1]);
+    }
+}
+
+function getWaterLevelStatus(val, t) {
+    if (!t) return 'normal';
+    if (val >= t.danger) return 'danger';
+    if (val >= t.evacuation) return 'evacuation';
+    if (val >= t.warning) return 'warning';
+    if (val >= t.standby) return 'standby';
+    return 'normal';
+}
+
+function getWaterLevelColor(status) {
+    const colors = {
+        'normal': '#00ddcc',
+        'standby': '#ffff00',
+        'warning': '#ff9900',
+        'evacuation': '#ff0033',
+        'danger': '#9900cc'
+    };
+    return colors[status] || colors['normal'];
 }
 
 function updateFrame(timestamp) {
@@ -446,15 +534,22 @@ function updateFrame(timestamp) {
 
     const mode = document.getElementById('mode-selector').value;
     const alertEl = document.getElementById('data-alert');
+    const isWaterLevel = currentDataType === 'waterlevel';
+    const activeData = isWaterLevel ? waterlevelData : rainfallData;
+    
+    if (!activeData) return;
 
     // データ不足の判定と通知
     let alertMsg = '';
-    if (mode === 'max24' && timestamps.length < 144) {
-        const totalMin = timestamps.length * 10;
-        alertMsg = `24時間に満たないデータ（計${Math.floor(totalMin/60)}時間${totalMin%60}分）で最大値を算出しています。`;
-    } else if (mode === 'max60' && timestamps.length < 6) {
-        alertMsg = `60分に満たないデータ（計${timestamps.length * 10}分）で最大値を算出しています。`;
+    if (!isWaterLevel) {
+        if (mode === 'max24' && timestamps.length < 144) {
+            const totalMin = timestamps.length * 10;
+            alertMsg = `24時間に満たないデータ（計${Math.floor(totalMin/60)}時間${totalMin%60}分）で最大値を算出しています。`;
+        } else if (mode === 'max60' && timestamps.length < 6) {
+            alertMsg = `60分に満たないデータ（計${timestamps.length * 10}分）で最大値を算出しています。`;
+        }
     }
+    
     if (alertMsg) {
         document.getElementById('alert-message').innerText = alertMsg;
         alertEl.style.display = 'block';
@@ -473,35 +568,51 @@ function updateFrame(timestamp) {
     const zoom = map.getZoom();
     const stations = [];
 
-    rainfallData.mapping.forEach(station => {
-        let value = 0;         // 等雨量線の計算用（補間あり）
-        let displayValue = 0;  // マーカー表示用（補間なし）
-        let isMissing = false; // 描画不可フラグ
-        let isDisplayMissing = false; // 表示不可フラグ
+    activeData.mapping.forEach((station, idx) => {
+        let value = 0;         
+        let displayValue = 0;  
+        let isMissing = false; 
+        let isDisplayMissing = false; 
+        let levelStatus = 'normal';
 
         if (mode === 'current') {
-            const raw = rainfallData.timeSeries[timestamp]?.[station.name];
+            const raw = activeData.timeSeries[timestamp]?.[station.name];
             if (raw === null || raw === undefined) {
                 isMissing = true;
                 isDisplayMissing = true;
             } else {
                 value = raw;
                 displayValue = raw;
+                if (isWaterLevel) levelStatus = getWaterLevelStatus(raw, station.thresholds);
             }
         } else {
-            const summary = rainfallData.summary[station.row];
-            const rawInterp = summary?.[mode];
-            const rawDisplay = summary?.[mode + 'Raw'];
-            
-            if (rawInterp === null || rawInterp === undefined) isMissing = true;
-            else value = rawInterp;
+            const summary = isWaterLevel ? activeData.summary[idx] : activeData.summary[station.row];
+            if (!summary) { 
+                isMissing = true; isDisplayMissing = true; 
+            } else {
+                if (isWaterLevel) {
+                    displayValue = summary.maxPeriod;
+                    if (displayValue === null || displayValue === undefined) {
+                        isMissing = true; isDisplayMissing = true;
+                    } else {
+                        value = displayValue;
+                        levelStatus = summary.maxExceededLevel || getWaterLevelStatus(value, station.thresholds);
+                    }
+                } else {
+                    const rawInterp = summary[mode];
+                    const rawDisplay = summary[mode + 'Raw'];
+                    if (rawInterp === null || rawInterp === undefined) isMissing = true;
+                    else value = rawInterp;
 
-            if (rawDisplay === null || rawDisplay === undefined) isDisplayMissing = true;
-            else displayValue = rawDisplay;
+                    if (rawDisplay === null || rawDisplay === undefined) isDisplayMissing = true;
+                    else displayValue = rawDisplay;
+                }
+            }
         }
 
-        const color = isDisplayMissing ? '#888' : getRainfallColor(displayValue);
-        const displayVal = isDisplayMissing ? '---' : displayValue.toFixed(mode==='max24'?1:0);
+        const color = isDisplayMissing ? '#888' : (isWaterLevel ? getWaterLevelColor(levelStatus) : getRainfallColor(displayValue));
+        const formatter = (v) => isWaterLevel ? v.toFixed(2) : v.toFixed(mode==='max24'?1:0);
+        const displayVal = isDisplayMissing ? '---' : formatter(displayValue);
 
         const icon = L.divIcon({
             className: 'station-label',
@@ -509,14 +620,18 @@ function updateFrame(timestamp) {
         });
         const marker = L.marker([station.lat, station.lon], { icon }).addTo(map);
 
-        // 最大雨量モードなら記録日時をツールチップに表示（補間データのピーク時を使用）
-        if (mode === 'max60' || mode === 'max24') {
-            const sum = rainfallData.summary[station.row];
-            const peakTime = mode === 'max60' ? (sum?.max60RawTime || sum?.max60Time) : (sum?.max24RawTime || sum?.max24Time);
-            if (peakTime) {
-                const parts = peakTime.split(' ');
-                const formattedTime = `${parseInt(parts[0].substring(4, 6))}/${parseInt(parts[0].substring(6, 8))} ${parts[1]}`;
-                marker.bindTooltip(`記録日時: ${formattedTime}`, { direction: 'top', sticky: true });
+        if (mode === 'cumulative' && !isWaterLevel) {
+            marker.bindTooltip('クリックしてグラフを表示', { direction: 'top', sticky: true });
+            marker.on('click', () => openChartModal(station));
+        } else if (mode !== 'current') {
+            const summary = isWaterLevel ? activeData.summary[idx] : activeData.summary[station.row];
+            if (summary) {
+                const peakTime = isWaterLevel ? summary.maxPeriodTime : (mode === 'max60' ? (summary.max60RawTime || summary.max60Time) : (summary.max24RawTime || summary.max24Time));
+                if (peakTime) {
+                    const tsParts = peakTime.split(' ');
+                    const formattedTime = tsParts.length >= 2 ? `${parseInt(tsParts[0].substring(4, 6))}/${parseInt(tsParts[0].substring(6, 8))} ${tsParts[1]}` : peakTime;
+                    marker.bindTooltip(`記録日時: ${formattedTime}`, { direction: 'top', sticky: true });
+                }
             }
         }
 
@@ -526,13 +641,69 @@ function updateFrame(timestamp) {
             stations.push({
                 lat: station.lat,
                 lon: station.lon,
-                value: value
+                value: value,
+                station: station,
+                levelStatus: levelStatus
             });
         }
     });
 
-    renderIsolines(stations, mode);
+    if (isWaterLevel) {
+        if (isolineLayer) { map.removeLayer(isolineLayer); isolineLayer = null; }
+        if (fillOverlay)  { map.removeLayer(fillOverlay);  fillOverlay  = null; }
+        renderRivers(stations, mode);
+    } else {
+        if (riverLayer) { map.removeLayer(riverLayer); riverLayer = null; }
+        renderIsolines(stations, mode);
+    }
+    
     updateAdoptionPanel(mode);
+}
+
+function renderRivers(activeStations, mode) {
+    if (riverLayer) { map.removeLayer(riverLayer); riverLayer = null; }
+    if (!riverGeoJson || !riverGeoJson.features) return; 
+
+    const riverFeatures = [];
+
+    activeStations.forEach(st => {
+        if (!st.station.riverName) return;
+        const color = getWaterLevelColor(st.levelStatus);
+        
+        const targetRiver = riverGeoJson.features.find(f => f.properties?.name === st.station.riverName);
+        if (targetRiver) {
+            let sliced = targetRiver;
+            
+            if (st.station.coverageKm && targetRiver.geometry.type === 'LineString') {
+                try {
+                    const pt = turf.point([st.lon, st.lat]);
+                    const length = turf.length(targetRiver, {units: 'kilometers'});
+                    const linePt = turf.nearestPointOnLine(targetRiver, pt);
+                    const distToPt = turf.length(turf.lineSlice(turf.point(targetRiver.geometry.coordinates[0]), linePt, targetRiver), {units: 'kilometers'});
+                    
+                    const startDist = Math.max(0, distToPt - st.station.coverageKm / 2);
+                    const endDist = Math.min(length, distToPt + st.station.coverageKm / 2);
+                    
+                    sliced = turf.lineSliceAlong(targetRiver, startDist, endDist, {units: 'kilometers'});
+                } catch(e) {
+                    console.warn("Failed to slice river feature", e);
+                }
+            }
+            
+            // Render this piece with a high z-index to overlay nicely
+            riverFeatures.push({
+                type: "Feature",
+                properties: { color: color, weight: st.levelStatus === 'normal' ? 3 : 5 },
+                geometry: sliced.geometry
+            });
+        }
+    });
+
+    riverLayer = L.geoJson({ type: "FeatureCollection", features: riverFeatures }, {
+        style: function(feature) {
+            return { color: feature.properties.color, weight: feature.properties.weight, opacity: 0.85 };
+        }
+    }).addTo(map);
 }
 
 function getRainfallColor(v) {
@@ -628,37 +799,65 @@ function formatPeakTime(ts) {
 }
 
 function updateAdoptionPanel(mode) {
+    const isWaterLevel = currentDataType === 'waterlevel';
     const panel = document.getElementById('adoption-panel');
-    const criteria = ADOPTION_CRITERIA[mode];
-    if (!criteria) {
-        panel.classList.add('adoption-panel-hidden');
-        return;
+    
+    // 雨量モード時
+    if (!isWaterLevel) {
+        const criteria = ADOPTION_CRITERIA[mode];
+        if (!criteria) {
+            panel.classList.add('adoption-panel-hidden');
+            return;
+        }
+        panel.classList.remove('adoption-panel-hidden');
+
+        const modeLabel = mode === 'max24' ? '24時間降水量' : '1時間降水量';
+        document.getElementById('adoption-criteria-label').textContent =
+            `採択基準: ${modeLabel} ≥ ${criteria}mm`;
+
+        const exceeded = rainfallData.mapping
+            .map(s => {
+                const sum  = rainfallData.summary[s.row];
+                const val  = sum?.[mode + 'Raw']     ?? null;
+                const time = sum?.[mode + 'RawTime'] ?? '';
+                return { name: s.name, city: s.city, val, time };
+            })
+            .filter(s => s.val !== null && s.val >= criteria)
+            .sort((a, b) => b.val - a.val);
+
+        setupAdoptionFilters(exceeded, mode, criteria, false);
+    } else {
+        // 水位モード時
+        const activeData = waterlevelData;
+        if (!activeData || mode !== 'maxPeriod') {
+            panel.classList.add('adoption-panel-hidden');
+            return;
+        }
+        panel.classList.remove('adoption-panel-hidden');
+        document.getElementById('adoption-criteria-label').textContent = `基準: はん濫注意水位(または待機単位)以上`;
+
+        const exceeded = activeData.mapping
+            .map((s, idx) => {
+                const sum = activeData.summary[idx];
+                const val = sum?.maxPeriod ?? null;
+                const time = sum?.maxPeriodTime ?? '';
+                const levelStatus = sum?.maxExceededLevel || 'normal';
+                return { name: s.name, city: s.city, val, time, levelStatus };
+            })
+            .filter(s => s.levelStatus !== 'normal') // 平常時は省く
+            .sort((a, b) => b.val - a.val);
+            
+        setupAdoptionFilters(exceeded, mode, null, true);
     }
-    panel.classList.remove('adoption-panel-hidden');
+}
 
-    const modeLabel = mode === 'max24' ? '24時間降水量' : '1時間降水量';
-    document.getElementById('adoption-criteria-label').textContent =
-        `採択基準: ${modeLabel} ≥ ${criteria}mm`;
-
-    const exceeded = rainfallData.mapping
-        .map(s => {
-            const sum  = rainfallData.summary[s.row];
-            const val  = sum?.[mode + 'Raw']     ?? null;
-            const time = sum?.[mode + 'RawTime'] ?? '';
-            return { name: s.name, city: s.city, val, time };
-        })
-        .filter(s => s.val !== null && s.val >= criteria)
-        .sort((a, b) => b.val - a.val);
-
-    // 市区町村チェックボックスリストの動的生成
+function setupAdoptionFilters(exceeded, mode, criteria, isWater) {
     const filterContainer = document.getElementById('adoption-city-filter-container');
     const cities = [...new Set(exceeded.map(s => s.city))].sort();
     
-    // 選択状態の初期化
     if (!window._selectedCities) {
         window._selectedCities = new Set();
     } else {
-        // 現在のデータに存在しない市町は選択から外す
         window._selectedCities.forEach(c => {
             if (!cities.includes(c)) window._selectedCities.delete(c);
         });
@@ -682,7 +881,7 @@ function updateAdoptionPanel(mode) {
             } else {
                 window._selectedCities.delete(c);
             }
-            renderAdoptionTable();
+            renderAdoptionTable(isWater);
         });
         
         label.appendChild(cb);
@@ -690,11 +889,11 @@ function updateAdoptionPanel(mode) {
         filterContainer.appendChild(label);
     });
 
-    window._adoptionExportData = { exceeded, mode, criteria };
-    renderAdoptionTable();
+    window._adoptionExportData = { exceeded, mode, criteria, isWater };
+    renderAdoptionTable(isWater);
 }
 
-function renderAdoptionTable() {
+function renderAdoptionTable(isWater) {
     const data = window._adoptionExportData;
     if (!data) return;
 
@@ -705,22 +904,23 @@ function renderAdoptionTable() {
         : data.exceeded;
 
     const tbody = document.getElementById('adoption-tbody');
-    tbody.innerHTML = filtered.map(s => `
-        <tr>
-            <td class="td-name">${s.name}</td>
-            <td class="td-city">${s.city}</td>
-            <td class="td-val" style="color:${getRainfallColor(s.val)}">
-                ${s.val.toFixed(data.mode === 'max24' ? 1 : 0)}
-            </td>
-            <td class="td-time">${formatPeakTime(s.time)}</td>
-        </tr>
-    `).join('');
+    tbody.innerHTML = filtered.map(s => {
+        const color = isWater ? getWaterLevelColor(s.levelStatus) : getRainfallColor(s.val);
+        const valDisp = isWater ? s.val.toFixed(2) : s.val.toFixed(data.mode === 'max24' ? 1 : 0);
+        return `
+            <tr>
+                <td class="td-name">${s.name}</td>
+                <td class="td-city">${s.city}</td>
+                <td class="td-val" style="color:${color}">${valDisp}</td>
+                <td class="td-time">${formatPeakTime(s.time)}</td>
+            </tr>
+        `;
+    }).join('');
 
     document.getElementById('adoption-empty').style.display = filtered.length ? 'none' : 'block';
     
-    // 絞り込んだ結果の件数を表示
-    // フィルタが有効（1つ以上の市町が選択されている場合）は「絞り込み該当」と表示
-    const prefix = (activeCities && activeCities.size > 0) ? '選択地域: 基準超過' : '採択基準超過';
+    const countLabel = isWater ? '危険水位超過' : '採択基準超過';
+    const prefix = (activeCities && activeCities.size > 0) ? `選択地域: ${countLabel}` : countLabel;
     document.getElementById('adoption-count').textContent = `${prefix} ${filtered.length}局`;
 }
 
@@ -753,6 +953,145 @@ function exportCSV() {
     a.download = `採択基準超過局_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+}
+
+let chartInstance = null;
+
+function openChartModal(station) {
+    const modal = document.getElementById('chart-modal');
+    const title = document.getElementById('chart-modal-title');
+    const ctx = document.getElementById('rainfall-chart').getContext('2d');
+
+    const labels = [];
+    const hourlyData = [];
+    const cumulativeData = [];
+    let currentCumulative = 0;
+
+    // タイムスタンプは10分間隔（60分ローリング雨量）で格納されているため、
+    // 単純に合算すると重複加算になってしまいます。
+    // そのため、1時間ごと（毎時00分、および24時を表す23:59）のデータを抽出して棒グラフと累積を作成します。
+    timestamps.forEach(ts => {
+        if (ts.endsWith(':00') || ts.endsWith('23:59')) {
+            const val = rainfallData.timeSeries[ts]?.[station.name] || 0;
+            const tsParts = ts.split(' ');
+            let timeLabel = tsParts.length >= 2 ? `${parseInt(tsParts[0].substring(4, 6))}/${parseInt(tsParts[0].substring(6, 8))} ${tsParts[1]}` : ts;
+            if (timeLabel.endsWith('23:59')) timeLabel = timeLabel.replace('23:59', '24:00'); // 表示上は24:00にする
+            
+            labels.push(timeLabel);
+            hourlyData.push(val);
+            currentCumulative += val;
+            cumulativeData.push(currentCumulative);
+        }
+    });
+
+    const startTs = timestamps[0];
+    const endTs = timestamps[timestamps.length - 1];
+    const formatTitleTs = (t) => {
+        if (!t) return '';
+        const p = t.split(' ');
+        return `${parseInt(p[0].substring(4,6))}/${parseInt(p[0].substring(6,8))} ${p[1]}`;
+    };
+    
+    // グラフの累積は1時間ごとのローリングサムの合算（欠測時は0扱い）のため、生データからの厳密な累積とわずかにずれる可能性があります。
+    // マップ上のマーカーと同じ「厳密な総雨量」をタイトルに付与します。
+    const targetStation = rainfallData.mapping.find(s => s.name === station.name);
+    const exactTotal = targetStation ? (rainfallData.summary[targetStation.row]?.cumulative || 0) : 0;
+    
+    title.innerText = `🌧️ ${station.name} (${formatTitleTs(startTs)} 〜 ${formatTitleTs(endTs)}) - 総雨量: ${exactTotal.toFixed(1)}mm`;
+
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+
+    const isLight = document.body.classList.contains('light-theme');
+    const textColor = isLight ? '#333' : '#fff';
+    const gridColor = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '60分降水量 (mm)',
+                    data: hourlyData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y',
+                    order: 2
+                },
+                {
+                    label: '累積雨量 (mm)',
+                    data: cumulativeData,
+                    type: 'line',
+                    borderColor: '#ff4500',
+                    backgroundColor: '#ff4500',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    fill: false,
+                    yAxisID: 'y1',
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: {
+                    labels: { color: textColor }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    borderColor: 'rgba(255,255,255,0.2)',
+                    borderWidth: 1
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: gridColor },
+                    ticks: {
+                        color: textColor,
+                        maxTicksLimit: 12
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: '60分降水量 (mm)',
+                        color: textColor
+                    },
+                    grid: { color: gridColor },
+                    ticks: { color: textColor }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    title: {
+                        display: true,
+                        text: '累積雨量 (mm)',
+                        color: textColor
+                    },
+                    grid: { drawOnChartArea: false },
+                    ticks: { color: textColor }
+                }
+            }
+        }
+    });
+
+    modal.classList.remove('modal-hidden');
 }
 
 init();

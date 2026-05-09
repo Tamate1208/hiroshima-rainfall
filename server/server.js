@@ -27,8 +27,16 @@ app.post('/api/update-data', (req, res) => {
     const { start, end } = req.body;
     console.log(`[API] Update requested: ${start} to ${end}`);
 
-    if (!start || !end) {
-        return res.status(400).json({ error: '開始日と終了日を指定してください' });
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!start || !end || !datePattern.test(start) || !datePattern.test(end)) {
+        return res.status(400).json({ error: '日付形式が不正です (YYYY-MM-DD)' });
+    }
+    if (new Date(start) > new Date(end)) {
+        return res.status(400).json({ error: '開始日は終了日以前にしてください' });
+    }
+    const diffDays = (new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24);
+    if (diffDays > 31) {
+        return res.status(400).json({ error: '取得期間は最大31日です' });
     }
 
     // process_data.js はプロジェクトルートに配置

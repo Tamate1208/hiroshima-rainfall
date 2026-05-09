@@ -41,29 +41,46 @@
             <div id="settings-body">
                 <div class="stats">
                     <div class="stat-item">
-                        <span class="label">地図テーマ</span>
+                        <label class="label" for="theme-selector">地図テーマ</label>
                         <select id="theme-selector" title="地図テーマを選択">
                             <option value="dark">ダークモード</option>
                             <option value="light">標準表示 (ライト)</option>
                         </select>
                     </div>
                     <div class="stat-item">
-                        <span class="label">表示モード</span>
+                        <label class="label" for="datatype-selector">データ種別</label>
+                        <select id="datatype-selector" title="表示するデータを選択">
+                            <option value="rainfall">🌧️ 雨量データ</option>
+                            <option value="waterlevel">🌊 河川水位データ</option>
+                        </select>
+                    </div>
+                    <div class="stat-item">
+                        <label class="label" for="mode-selector">表示モード</label>
                         <select id="mode-selector" title="表示モードを選択">
                             <option value="current">リアルタイム表示 (60分降水量)</option>
                             <option value="max60">期間中最大60分降水量</option>
                             <option value="max24">期間中最大24時間降水量</option>
+                            <option value="cumulative">期間中累加雨量 (総雨量)</option>
                         </select>
                     </div>
                     <div class="stat-item date-picker">
-                        <span class="label">期間設定</span>
+                        <label class="label">期間設定</label>
                         <div class="date-inputs">
+                            <label for="start-date" class="sr-only">開始日</label>
                             <input type="date" id="start-date" title="開始日" value="2026-03-14">
                             <span>～</span>
+                            <label for="end-date" class="sr-only">終了日</label>
                             <input type="date" id="end-date" title="終了日" value="2026-03-14">
                         </div>
                         <button id="update-data" class="btn-small">データ更新</button>
                         <span id="update-status" class="update-status"></span>
+                    </div>
+                    <div class="stat-item stat-item--row" id="isoline-toggle-container">
+                        <label class="label" for="toggle-isolines">等雨量線</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="toggle-isolines" checked>
+                            <span class="toggle-knob"></span>
+                        </label>
                     </div>
                 </div>
             </div>
@@ -80,7 +97,7 @@
         </div>
     </div>
 
-    <div class="legend glass">
+    <div id="legend-rainfall" class="legend glass">
         <h3>降水量 (mm)</h3>
         <div class="legend-scale">
             <div class="scale-item"><span id="bg-rain-0"></span> 0-1</div>
@@ -92,13 +109,24 @@
         </div>
     </div>
 
-    <!-- 採択基準超過局パネル (フェーズ3) -->
+    <div id="legend-waterlevel" class="legend glass legend-hidden">
+        <h3>水位危険度</h3>
+        <div class="legend-scale">
+            <div class="scale-item"><span id="bg-wl-normal"></span> 平常</div>
+            <div class="scale-item"><span id="bg-wl-standby"></span> 水防団待機</div>
+            <div class="scale-item"><span id="bg-wl-warning"></span> はん濫注意</div>
+            <div class="scale-item"><span id="bg-wl-evacuation"></span> 避難判断</div>
+            <div class="scale-item"><span id="bg-wl-danger"></span> はん濫危険</div>
+        </div>
+    </div>
+
+    <!-- 超過局パネル -->
     <div id="adoption-panel" class="overlay top-right adoption-panel-hidden">
         <div class="glass adoption-glass">
             <div class="panel-header">
                 <div class="panel-title-row">
-                    <span class="panel-icon">🔴</span>
-                    <h3 id="adoption-count">採択基準超過 0局</h3>
+                    <span id="panel-icon" class="panel-icon">🔴</span>
+                    <h3 id="adoption-count">超過 0局</h3>
                 </div>
                 <div id="adoption-criteria-label" class="criteria-label"></div>
                 <div class="filter-row">
@@ -130,8 +158,22 @@
         </div>
     </div>
 
+    <!-- グラフモーダル -->
+    <div id="chart-modal" class="modal-overlay modal-hidden">
+        <div class="glass modal-content">
+            <div class="modal-header">
+                <h3 id="chart-modal-title">観測局名 (期間)</h3>
+                <button id="close-chart-modal" class="btn-icon">×</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="rainfall-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script type="module" src="main.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="module" src="src/main.js"></script>
 </body>
 
 </html>
