@@ -74,27 +74,49 @@ async function init() {
         }
     });
 
-    // 日付初期値を今日に設定
-    const now      = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    // 日付初期値を昨日〜今日に設定
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
 
     const fmt = (d) => d.getFullYear() + '-' +
                        String(d.getMonth() + 1).padStart(2, '0') + '-' +
                        String(d.getDate()).padStart(2, '0');
 
-    document.getElementById('start-date').value = fmt(now);
-    document.getElementById('end-date').value   = fmt(tomorrow);
+    const startStr = fmt(yesterday);
+    const endStr = fmt(now);
+
+    document.getElementById('start-date').value = startStr;
+    document.getElementById('end-date').value   = endStr;
 
     document.getElementById('current-date').innerText =
-        `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ` +
-        `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        `対象データ期間: ${startStr.replace(/-/g, '/')} ～ ${endStr.replace(/-/g, '/')}`;
 
     document.getElementById('start-date').addEventListener('change', (e) => {
-        const d = new Date(e.target.value);
-        d.setDate(d.getDate() + 1);
-        document.getElementById('end-date').value = fmt(d);
+        document.getElementById('end-date').value = e.target.value;
     });
+
+    // 初回自動データ更新
+    try {
+        const initialLoading = document.getElementById('initial-loading');
+        if (initialLoading) initialLoading.classList.remove('hidden');
+        
+        const base = `${location.protocol}//${location.hostname}:${location.port}`;
+        const res = await fetch(`${base}/api/update-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start: startStr, end: endStr })
+        });
+        
+        if (!res.ok) {
+            console.warn("Initial data update failed, falling back to local data.");
+        }
+    } catch (e) {
+        console.error("Initial data update error:", e);
+    } finally {
+        const initialLoading = document.getElementById('initial-loading');
+        if (initialLoading) initialLoading.classList.add('hidden');
+    }
 
     await loadData();
 

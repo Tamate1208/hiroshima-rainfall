@@ -385,13 +385,43 @@ async function init() {
                     String(now.getMonth() + 1).padStart(2, '0') + '-' + 
                     String(now.getDate()).padStart(2, '0');
     
-    document.getElementById('start-date').value = todayStr;
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.getFullYear() + '-' + 
+                    String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + 
+                    String(yesterday.getDate()).padStart(2, '0');
+    
+    document.getElementById('start-date').value = yesterdayStr;
     document.getElementById('end-date').value = todayStr;
-    document.getElementById('current-date').innerText = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    const formatDateOnly = (val) => val ? val.replace(/-/g, '/').replace(/\/0/g, '/') : '';
+    document.getElementById('current-date').innerText = `対象データ期間: ${formatDateOnly(yesterdayStr)} ～ ${formatDateOnly(todayStr)}`;
 
     document.getElementById('start-date').addEventListener('change', (e) => {
         document.getElementById('end-date').value = e.target.value;
     });
+
+    // 初回自動データ更新
+    try {
+        const initialLoading = document.getElementById('initial-loading');
+        if (initialLoading) initialLoading.classList.remove('hidden');
+        
+        const base = `${location.protocol}//${location.hostname}:${location.port}`;
+        const res = await fetch(`${base}/api/update-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start: yesterdayStr, end: todayStr })
+        });
+        
+        if (!res.ok) {
+            console.warn("Initial data update failed, falling back to local data.");
+        }
+    } catch (e) {
+        console.error("Initial data update error:", e);
+    } finally {
+        const initialLoading = document.getElementById('initial-loading');
+        if (initialLoading) initialLoading.classList.add('hidden');
+    }
 
     await loadData();
 
