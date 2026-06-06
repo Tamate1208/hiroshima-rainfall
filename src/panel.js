@@ -20,7 +20,7 @@ export function updateAdoptionPanel(currentDataType, mode, rainfallData, waterle
 
     if (!isWaterLevel) {
         const criteria = ADOPTION_CRITERIA[mode];
-        if (!criteria) { panel.classList.add('adoption-panel-hidden'); return; }
+        if (!criteria || mode === 'current') { panel.classList.add('adoption-panel-hidden'); return; }
         panel.classList.remove('adoption-panel-hidden');
 
         const modeLabel = mode === 'max24' ? '24時間降水量' : '1時間降水量';

@@ -3,7 +3,7 @@
 export const ADOPTION_CRITERIA = {
     max24: 80,     // mm/24h — 公共土木・農地等
     max60: 20,     // mm/1h
-    current: null,
+    current: 20,   // mm/1h - リアルタイム60分雨量
     cumulative: null
 };
 
@@ -17,8 +17,8 @@ export const THRESHOLDS_BY_MODE = {
 export const GRID = {
     minLon: 131.8, maxLon: 133.6,
     minLat: 33.9,  maxLat: 35.3,
-    cols: 100,
-    rows: 80
+    cols: 150,
+    rows: 120
 };
 
 export const LON_STEP = (GRID.maxLon - GRID.minLon) / GRID.cols;

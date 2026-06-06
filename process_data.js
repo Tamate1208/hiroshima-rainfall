@@ -308,14 +308,14 @@ async function processWaterlevelRange(startDateStr, endDateStr) {
                 const sidx = parseInt(sheetName.replace('水位定時表', '')) - 1;
                 for (let r = 4; r <= 1000; r++) {
                     if (dayData[r] === undefined) continue;
-                    // C〜F列(2〜5)は基準値(水防団待機, 注意, 避難, 危険)のためスキップ
-                    // データはG列(c=6)から36個分（10分×6時間=36）
-                    for (let c = 6; c <= 41; c++) {
+                    // C〜G列(2〜6)は基準値(水防団待機, 注意, 避難, 危険, 発生)のためスキップ
+                    // データはH列(c=7)から36個分（10分×6時間=36）
+                    for (let c = 7; c <= 42; c++) {
                         const cellAddress = XLSX.utils.encode_cell({r: r-1, c: c});
                         const cell = sheet[cellAddress];
                         const val = cell && !isNaN(parseFloat(cell.v)) ? parseFloat(cell.v) : null;
                         
-                        const slotIndex = (sidx * 36) + (c - 6);
+                        const slotIndex = (sidx * 36) + (c - 7);
                         if (slotIndex < 144) dayData[r][slotIndex] = val;
                     }
                 }
@@ -324,10 +324,10 @@ async function processWaterlevelRange(startDateStr, endDateStr) {
 
         // タイムスタンプと合わせて timeSeries を構築
         for (let i = 0; i < 144; i++) {
-            const h = Math.floor((i + 1) * 10 / 60);
-            const m = ((i + 1) * 10) % 60;
+            const h = Math.floor(i * 10 / 60);
+            const m = (i * 10) % 60;
             const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-            const ts = (timeStr === '24:00') ? `${dateStr} 23:59` : `${dateStr} ${timeStr}`;
+            const ts = `${dateStr} ${timeStr}`;
             
             if (!timeSeries[ts]) timeSeries[ts] = {};
             mapping.forEach(station => {

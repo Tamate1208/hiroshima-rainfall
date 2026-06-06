@@ -5,7 +5,7 @@ import * as turf from '@turf/turf';
 import { GRID, ADOPTION_CRITERIA, THRESHOLDS_BY_MODE } from './constants.js';
 import { buildSmoothGrid } from './interpolation.js';
 import { getIsolines } from './contour.js';
-import { getRainfallColor, getWaterLevelColor } from './colors.js';
+import { getRainfallColor, getWaterLevelColor, getSmoothRainfallColor } from './colors.js';
 
 /**
  * 等雨量線をレンダリング (同期)
@@ -23,27 +23,36 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
 
     const grid = buildSmoothGrid(stations);
 
-    // --- 採択基準超過域の塗りつぶし (Canvas オーバーレイ) ---
+    // --- なめらかな連続カラーコンター塗りつぶし (Canvas ImageData オーバーレイ) ---
     const criteria = ADOPTION_CRITERIA[mode];
-    let fillOverlay = null;
-    if (criteria) {
-        const canvas = document.createElement('canvas');
-        canvas.width  = GRID.cols;
-        canvas.height = GRID.rows;
-        const ctx = canvas.getContext('2d');
-        for (let r = 0; r < GRID.rows; r++) {
-            for (let c = 0; c < GRID.cols; c++) {
-                const val = grid[r * GRID.cols + c];
-                if (val >= criteria) {
-                    const alpha = Math.min(0.6, 0.25 + (val - criteria) / 250);
-                    ctx.fillStyle = `rgba(255, 69, 0, ${alpha})`;
-                    ctx.fillRect(c, r, 1, 1);
-                }
+    const canvas = document.createElement('canvas');
+    canvas.width  = GRID.cols;
+    canvas.height = GRID.rows;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(GRID.cols, GRID.rows);
+    const data = imgData.data;
+
+    for (let r = 0; r < GRID.rows; r++) {
+        for (let c = 0; c < GRID.cols; c++) {
+            const val = grid[r * GRID.cols + c];
+            const idx = (r * GRID.cols + c) * 4;
+            if (val >= 1) {
+                const color = getSmoothRainfallColor(val);
+                data[idx]     = color.r;
+                data[idx + 1] = color.g;
+                data[idx + 2] = color.b;
+                // 基準値を超過しているエリアは不透明度を +0.15 強調
+                const extraAlpha = (criteria && val >= criteria) ? 0.15 : 0;
+                data[idx + 3] = Math.round(Math.min(255, (color.a + extraAlpha) * 255));
+            } else {
+                data[idx + 3] = 0;
             }
         }
-        const bounds = [[GRID.minLat, GRID.minLon], [GRID.maxLat, GRID.maxLon]];
-        fillOverlay = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 1, zIndex: 299 }).addTo(map);
     }
+    ctx.putImageData(imgData, 0, 0);
+
+    const bounds = [[GRID.minLat, GRID.minLon], [GRID.maxLat, GRID.maxLon]];
+    const fillOverlay = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 1, zIndex: 299 }).addTo(map);
 
     // --- 等雨量線レイヤー ---
     const thresholds = THRESHOLDS_BY_MODE[mode] ?? [1, 5, 10, 20, 30, 50];
