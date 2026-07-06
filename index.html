@@ -69,6 +69,8 @@
                             <option value="max60">期間中最大60分降水量</option>
                             <option value="max24">期間中最大24時間降水量</option>
                             <option value="cumulative">期間中累加雨量 (総雨量)</option>
+                            <option value="rprime">🔶 R' リアルタイム (土砂災害危険度)</option>
+                            <option value="rprimeMax">🔶 R' 期間最大値</option>
                         </select>
                     </div>
                     <div class="stat-item date-picker">
@@ -125,6 +127,16 @@
             <div class="scale-item"><span id="bg-wl-warning"></span> はん濫注意</div>
             <div class="scale-item"><span id="bg-wl-evacuation"></span> 避難判断</div>
             <div class="scale-item"><span id="bg-wl-danger"></span> はん濫危険</div>
+        </div>
+    </div>
+
+    <div id="legend-rprime" class="legend glass legend-hidden">
+        <h3>雨量指標 R'</h3>
+        <div class="legend-scale">
+            <div class="scale-item"><span id="bg-rp-normal"></span> 平常 (&lt;125)</div>
+            <div class="scale-item"><span id="bg-rp-watch"></span> 注意 (≥125)</div>
+            <div class="scale-item"><span id="bg-rp-caution"></span> 警戒 (≥175)</div>
+            <div class="scale-item"><span id="bg-rp-danger"></span> 危険 (≥250)</div>
         </div>
     </div>
 

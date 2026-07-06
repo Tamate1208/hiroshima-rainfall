@@ -14,6 +14,12 @@
     --level-evacuation: #ff0033;
     --level-danger: #9900cc;
 
+    /* R' Theme Variables */
+    --rprime-normal: #00ddcc;
+    --rprime-watch: #ffcc00;
+    --rprime-caution: #ff6600;
+    --rprime-danger: #ff0033;
+
     /* Light Theme Variables */
     --light-bg: #f8f9fa;
     --light-glass: rgba(255, 255, 255, 0.7);
@@ -236,6 +242,12 @@ input[type="range"]::-webkit-slider-thumb {
 #bg-wl-warning    { background: var(--level-warning); }
 #bg-wl-evacuation { background: var(--level-evacuation); }
 #bg-wl-danger     { background: var(--level-danger); }
+
+/* R' Legend Colors */
+#bg-rp-normal     { background: var(--rprime-normal); }
+#bg-rp-watch      { background: var(--rprime-watch); }
+#bg-rp-caution    { background: var(--rprime-caution); }
+#bg-rp-danger     { background: var(--rprime-danger); }
 
 .legend-hidden {
     display: none !important;

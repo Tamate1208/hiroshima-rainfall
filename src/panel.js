@@ -2,16 +2,16 @@
 // Phase 1-D: window._* グローバル変数をモジュールスコープへ移動
 
 import { ADOPTION_CRITERIA } from './constants.js';
-import { getRainfallColor, getWaterLevelColor } from './colors.js';
+import { getRainfallColor, getWaterLevelColor, getRprimeColor } from './colors.js';
 
 // モジュールスコープの状態 (window._ 廃止)
-let _selectedCities    = new Set();
+let _selectedCities = new Set();
 let _adoptionExportData = null;
 
 export function formatPeakTime(ts) {
     if (!ts) return '---';
     const p = ts.split(' ');
-    return `${parseInt(p[0].substring(4,6))}/${parseInt(p[0].substring(6,8))} ${p[1]}`;
+    return `${parseInt(p[0].substring(4, 6))}/${parseInt(p[0].substring(6, 8))} ${p[1]}`;
 }
 
 export function updateAdoptionPanel(currentDataType, mode, rainfallData, waterlevelData) {
@@ -19,6 +19,33 @@ export function updateAdoptionPanel(currentDataType, mode, rainfallData, waterle
     const panel = document.getElementById('adoption-panel');
 
     if (!isWaterLevel) {
+        // --- 雨量模式 ---
+        if (mode === 'rprimeMax') {
+            // R' 期間最大値モード
+            if (!rainfallData) { panel.classList.add('adoption-panel-hidden'); return; }
+            panel.classList.remove('adoption-panel-hidden');
+            document.getElementById('panel-icon').textContent = '🔶';
+            document.getElementById('adoption-criteria-label').textContent =
+                '危険度: R\' ≥ 125mm（注意以上の局）';
+
+            const exceeded = rainfallData.mapping
+                .map(s => {
+                    const sum = rainfallData.summary[s.row];
+                    return {
+                        name: s.name,
+                        city: s.city,
+                        val:  sum?.maxRprime ?? null,
+                        time: sum?.maxRprimeTime ?? '',
+                        levelStatus: sum?.maxRprimeLevel || 'normal'
+                    };
+                })
+                .filter(s => s.levelStatus !== 'normal' && s.val !== null)
+                .sort((a, b) => b.val - a.val);
+
+            _setupFilters(exceeded, mode, null, false, true);
+            return;
+        }
+
         const criteria = ADOPTION_CRITERIA[mode];
         if (!criteria || mode === 'current') { panel.classList.add('adoption-panel-hidden'); return; }
         panel.classList.remove('adoption-panel-hidden');
@@ -29,15 +56,15 @@ export function updateAdoptionPanel(currentDataType, mode, rainfallData, waterle
 
         const exceeded = rainfallData.mapping
             .map(s => {
-                const sum  = rainfallData.summary[s.row];
-                const val  = sum?.[mode + 'Raw']     ?? null;
+                const sum = rainfallData.summary[s.row];
+                const val = sum?.[mode + 'Raw'] ?? null;
                 const time = sum?.[mode + 'RawTime'] ?? '';
                 return { name: s.name, city: s.city, val, time };
             })
             .filter(s => s.val !== null && s.val >= criteria)
             .sort((a, b) => b.val - a.val);
 
-        _setupFilters(exceeded, mode, criteria, false);
+        _setupFilters(exceeded, mode, criteria, false, false);
     } else {
         if (!waterlevelData || mode !== 'maxPeriod') {
             panel.classList.add('adoption-panel-hidden'); return;
@@ -57,11 +84,11 @@ export function updateAdoptionPanel(currentDataType, mode, rainfallData, waterle
             .filter(s => s.levelStatus !== 'normal')
             .sort((a, b) => b.val - a.val);
 
-        _setupFilters(exceeded, mode, null, true);
+        _setupFilters(exceeded, mode, null, true, false);
     }
 }
 
-function _setupFilters(exceeded, mode, criteria, isWater) {
+function _setupFilters(exceeded, mode, criteria, isWater, isRprime = false) {
     const filterContainer = document.getElementById('adoption-city-filter-container');
     const cities = [...new Set(exceeded.map(s => s.city))].sort();
 
@@ -81,20 +108,22 @@ function _setupFilters(exceeded, mode, criteria, isWater) {
         cb.addEventListener('change', (e) => {
             if (e.target.checked) _selectedCities.add(c);
             else _selectedCities.delete(c);
-            _renderTable(isWater);
+            _renderTable(isWater, isRprime);
         });
         label.appendChild(cb);
         label.appendChild(document.createTextNode(' ' + c));
         filterContainer.appendChild(label);
     });
 
-    _adoptionExportData = { exceeded, mode, criteria, isWater };
-    _renderTable(isWater);
+    _adoptionExportData = { exceeded, mode, criteria, isWater, isRprime };
+    _renderTable(isWater, isRprime);
 }
 
-function _renderTable(isWater) {
+function _renderTable(isWater, isRprime = false) {
     const data = _adoptionExportData;
     if (!data) return;
+    // isRprime は _adoptionExportData からも参照可能
+    const _isRprime = data.isRprime || isRprime;
 
     const filtered = (_selectedCities.size > 0)
         ? data.exceeded.filter(s => _selectedCities.has(s.city))
@@ -102,8 +131,17 @@ function _renderTable(isWater) {
 
     const tbody = document.getElementById('adoption-tbody');
     tbody.innerHTML = filtered.map(s => {
-        const color   = isWater ? getWaterLevelColor(s.levelStatus) : getRainfallColor(s.val);
-        const valDisp = isWater ? s.val.toFixed(2) : s.val.toFixed(data.mode === 'max24' ? 1 : 0);
+        let color, valDisp;
+        if (_isRprime) {
+            color   = getRprimeColor(s.levelStatus);
+            valDisp = s.val !== null ? s.val.toFixed(1) : '---';
+        } else if (isWater) {
+            color   = getWaterLevelColor(s.levelStatus);
+            valDisp = s.val !== null ? s.val.toFixed(2) : '---';
+        } else {
+            color   = getRainfallColor(s.val);
+            valDisp = s.val !== null ? s.val.toFixed(data.mode === 'max24' ? 1 : 0) : '---';
+        }
         return `
             <tr>
                 <td class="td-name">${s.name}</td>
@@ -114,7 +152,7 @@ function _renderTable(isWater) {
     }).join('');
 
     document.getElementById('adoption-empty').style.display = filtered.length ? 'none' : 'block';
-    const countLabel = isWater ? '危険水位超過' : '採択基準超過';
+    const countLabel = _isRprime ? 'R\'危険超過' : (isWater ? '危険水位超過' : '採択基準超過');
     const prefix = _selectedCities.size > 0 ? `選択地域: ${countLabel}` : countLabel;
     document.getElementById('adoption-count').textContent = `${prefix} ${filtered.length}局`;
 }
@@ -128,7 +166,8 @@ export function exportCSV() {
         : data.exceeded;
     if (!filtered.length) return;
 
-    const modeLabel = data.mode === 'max24' ? '24時間降水量(mm)' : '1時間降水量(mm)';
+    const modeLabel = data.mode === 'rprimeMax' ? 'R\'値(mm)'
+        : data.mode === 'max24' ? '24時間降水量(mm)' : '1時間降水量(mm)';
     const rows = [
         ['観測局名', '市区町村', modeLabel, '記録日時'],
         ...filtered.map(s => [
@@ -137,12 +176,12 @@ export function exportCSV() {
             formatPeakTime(s.time)
         ])
     ];
-    const csv  = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
+    const csv = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `採択基準超過局_${new Date().toISOString().slice(0,10)}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `採択基準超過局_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 }

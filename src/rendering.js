@@ -5,7 +5,7 @@ import * as turf from '@turf/turf';
 import { GRID, ADOPTION_CRITERIA, THRESHOLDS_BY_MODE } from './constants.js';
 import { buildSmoothGrid } from './interpolation.js';
 import { getIsolines } from './contour.js';
-import { getRainfallColor, getWaterLevelColor, getSmoothRainfallColor } from './colors.js';
+import { getRainfallColor, getWaterLevelColor, getSmoothRainfallColor, getSmoothRprimeColor } from './colors.js';
 
 /**
  * 等雨量線をレンダリング (同期)
@@ -23,8 +23,13 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
 
     const grid = buildSmoothGrid(stations);
 
-    // --- なめらかな連続カラーコンター塗りつぶし (Canvas ImageData オーバーレイ) ---
-    const criteria = ADOPTION_CRITERIA[mode];
+    // --- モード別のカラー関数と等値線閾値 ---
+    const isRprime   = (mode === 'rprime' || mode === 'rprimeMax');
+    const criteria   = isRprime ? null : ADOPTION_CRITERIA[mode];
+    const colorFn    = isRprime ? getSmoothRprimeColor : getSmoothRainfallColor;
+    const minVal     = isRprime ? 50 : 1; // R'は50mm以上から色を付ける
+
+    // --- なめらかなカラーコンター塗りつぶし (Canvas ImageData オーバーレイ) ---
     const canvas = document.createElement('canvas');
     canvas.width  = GRID.cols;
     canvas.height = GRID.rows;
@@ -32,17 +37,18 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
     const imgData = ctx.createImageData(GRID.cols, GRID.rows);
     const data = imgData.data;
 
+
     for (let r = 0; r < GRID.rows; r++) {
         for (let c = 0; c < GRID.cols; c++) {
             const val = grid[r * GRID.cols + c];
             const idx = (r * GRID.cols + c) * 4;
-            if (val >= 1) {
-                const color = getSmoothRainfallColor(val);
+            if (val >= minVal) {
+                const color = colorFn(val);
                 data[idx]     = color.r;
                 data[idx + 1] = color.g;
                 data[idx + 2] = color.b;
-                // 基準値を超過しているエリアは不透明度を +0.15 強調
-                const extraAlpha = (criteria && val >= criteria) ? 0.15 : 0;
+                // 基準値超過エリアは不透明度を +0.15 強調 (雨量モードのみ)
+                const extraAlpha = (!isRprime && criteria && val >= criteria) ? 0.15 : 0;
                 data[idx + 3] = Math.round(Math.min(255, (color.a + extraAlpha) * 255));
             } else {
                 data[idx + 3] = 0;
@@ -54,8 +60,10 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
     const bounds = [[GRID.minLat, GRID.minLon], [GRID.maxLat, GRID.maxLon]];
     const fillOverlay = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 1, zIndex: 299 }).addTo(map);
 
-    // --- 等雨量線レイヤー ---
-    const thresholds = THRESHOLDS_BY_MODE[mode] ?? [1, 5, 10, 20, 30, 50];
+    // --- 等値線レイヤー ---
+    const thresholds = isRprime
+        ? [125, 175, 250, 400]           // R' 危険閾値
+        : (THRESHOLDS_BY_MODE[mode] ?? [1, 5, 10, 20, 30, 50]);
     const isohyets = getIsolines(grid, thresholds);
 
     const features = isohyets.map(iso => ({

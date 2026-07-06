@@ -49,9 +49,20 @@ async function downloadFile(dateStr, type = 'uryo') {
 async function processRange(startDateStr, endDateStr) {
     const mapping = JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8'));
     const timeSeries = {};
+    const timeSeriesRprime = {}; // R' 時系列
     const stationMaxes = {};
     const allValues = {};     // row -> 全期間の10分値
     const allTimestamps = []; // 全期間のタイムスタンプ
+
+    // --- 雨量指標 R' パラメータ (広島・花崗岩地帯) ---
+    const RP_N    = 72;    // Rw 半減期 (時間)
+    const RP_M    = 1.5;   // rw 半減期 (時間)
+    const RP_R1   = 300;   // 楕円中心 Rw (mm) ※暫定値
+    const RP_r1   = 60;    // 楕円中心 rw (mm) ※暫定値
+    const RP_A    = 3.0;   // 重み係数 ※暫定値
+    const ALPHA_RW  = Math.pow(0.5, 1 / (6 * RP_N));
+    const ALPHA_rw  = Math.pow(0.5, 1 / (6 * RP_M));
+    const RP_Rfw0 = Math.sqrt(RP_R1 ** 2 + RP_A ** 2 * RP_r1 ** 2);
 
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
@@ -121,11 +132,38 @@ async function processRange(startDateStr, endDateStr) {
         stationMaxes[row] = { 
             max60: null, max60Raw: null, max24: null, max24Raw: null, 
             max60Time: '', max60RawTime: '', max24Time: '', max24RawTime: '',
-            cumulative: null, cumulativeRaw: null
+            cumulative: null, cumulativeRaw: null,
+            maxRprime: null, maxRprimeTime: '', maxRprimeLevel: 'normal'
         };
+
+        // R' 計算用の実効雨量状態 (ステーションごとにループ開始時リセット)
+        let Rw_state = 0;
+        let rw_state = 0;
 
         for (let i = 0; i < values.length; i++) {
             const ts = allTimestamps[i] || '';
+            const p10 = values[i] ?? 0; // 欠測は 0mm 扱いで減衰のみ継続
+
+            // --- 実効雨量 Rw・rw を更新 ---
+            Rw_state = ALPHA_RW * Rw_state + p10;
+            rw_state = ALPHA_rw * rw_state + p10;
+
+            // --- R' を計算 ---
+            const Rfw    = Math.sqrt(Math.pow(RP_R1 - Rw_state, 2) + Math.pow(RP_A * (RP_r1 - rw_state), 2));
+            const rprime = Math.max(0, Math.round((RP_Rfw0 - Rfw) * 10) / 10);
+
+            if (!timeSeriesRprime[ts]) timeSeriesRprime[ts] = {};
+            timeSeriesRprime[ts][station.name] = rprime;
+
+            // maxRprime の更新
+            if (stationMaxes[row].maxRprime === null || rprime > stationMaxes[row].maxRprime) {
+                stationMaxes[row].maxRprime     = rprime;
+                stationMaxes[row].maxRprimeTime = ts;
+                if      (rprime >= 250) stationMaxes[row].maxRprimeLevel = 'danger';
+                else if (rprime >= 175) stationMaxes[row].maxRprimeLevel = 'caution';
+                else if (rprime >= 125) stationMaxes[row].maxRprimeLevel = 'watch';
+                else                   stationMaxes[row].maxRprimeLevel = 'normal';
+            }
 
             // --- 60分ローリング (JMA基準: 6/6) ---
             const win60Full = values.slice(Math.max(0, i - 5), i + 1);
@@ -189,10 +227,14 @@ async function processRange(startDateStr, endDateStr) {
     Object.keys(timeSeries).forEach(ts => {
         if (ts > nowDateStr) delete timeSeries[ts];
     });
+    Object.keys(timeSeriesRprime).forEach(ts => {
+        if (ts > nowDateStr) delete timeSeriesRprime[ts];
+    });
 
     const output = {
         mapping: mapping,
         timeSeries: timeSeries,
+        timeSeriesRprime: timeSeriesRprime,
         summary: stationMaxes,
         range: { start: startDateStr, end: endDateStr }
     };
@@ -347,7 +389,8 @@ async function processWaterlevelRange(startDateStr, endDateStr) {
 
     const summary = mapping.map(s => ({
         maxPeriod: null,
-        maxPeriodTime: ""
+        maxPeriodTime: "",
+        maxExceededLevel: "normal"
     }));
 
     Object.keys(timeSeries).sort().forEach(ts => {
@@ -357,6 +400,18 @@ async function processWaterlevelRange(startDateStr, endDateStr) {
                 if (summary[idx].maxPeriod === null || val > summary[idx].maxPeriod) {
                     summary[idx].maxPeriod = val;
                     summary[idx].maxPeriodTime = ts;
+                    // maxPeriod 更新のたびに超過レベルを再評価
+                    const t = station.thresholds || {};
+                    if (t.danger !== null && t.danger !== undefined && val >= t.danger)
+                        summary[idx].maxExceededLevel = 'danger';
+                    else if (t.evacuation !== null && t.evacuation !== undefined && val >= t.evacuation)
+                        summary[idx].maxExceededLevel = 'evacuation';
+                    else if (t.warning !== null && t.warning !== undefined && val >= t.warning)
+                        summary[idx].maxExceededLevel = 'warning';
+                    else if (t.standby !== null && t.standby !== undefined && val >= t.standby)
+                        summary[idx].maxExceededLevel = 'standby';
+                    else
+                        summary[idx].maxExceededLevel = 'normal';
                 }
             }
         });

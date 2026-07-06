@@ -7,6 +7,30 @@ export const ADOPTION_CRITERIA = {
     cumulative: null
 };
 
+// --- 雨量指標 R' パラメータ (広島・花崗岩地帯 ※暫定値) ---
+export const RPRIME_PARAMS = {
+    N:    72,    // Rw 半減期 (時間)
+    M:    1.5,   // rw 半減期 (時間)
+    R1:   300,   // 楕円中心 Rw (mm)
+    r1:   60,    // 楕円中心 rw (mm)
+    A:    3.0,   // 短期/長期 重み係数
+};
+
+// R' 危険閾値 (広島花崗岩地帯)
+export const RPRIME_THRESHOLDS = {
+    danger:  250,  // 土石流発生開始
+    caution: 175,  // 山地崩壊発生開始
+    watch:   125,  // がけ崩れ発生開始
+};
+
+// 監視雨量強度 R_R 危険ランク閾値 (小さいほど危険)
+export const RR_THRESHOLDS = {
+    A: 30,   // 極めて危険 (≤30mm)
+    B: 50,   // 危険 (30〜50mm)
+    C: 70,   // 要注意 (50〜70mm)
+};
+
+
 export const THRESHOLDS_BY_MODE = {
     current:    [1, 5, 10, 20],
     max60:      [1, 5, 10, 20, 30, 50],

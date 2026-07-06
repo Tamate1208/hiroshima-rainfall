@@ -2,7 +2,7 @@
 // Phase 1-C: isolineLayer / fillOverlay をファイル先頭に宣言
 // Phase 4-A: データ取得失敗をUIに表示
 
-import { getRainfallColor, getWaterLevelColor, getWaterLevelStatus } from './colors.js';
+import { getRainfallColor, getWaterLevelColor, getWaterLevelStatus, getRprimeColor, getRprimeStatus } from './colors.js';
 import { renderIsolines, renderRivers } from './rendering.js';
 import { updateAdoptionPanel, exportCSV } from './panel.js';
 import { openChartModal } from './chart.js';
@@ -46,6 +46,7 @@ async function init() {
 
         document.getElementById('legend-rainfall').classList.toggle('legend-hidden', currentDataType !== 'rainfall');
         document.getElementById('legend-waterlevel').classList.toggle('legend-hidden', currentDataType !== 'waterlevel');
+        document.getElementById('legend-rprime').classList.toggle('legend-hidden', true); // モード切替時は未選択状態に
         document.getElementById('panel-icon').textContent = currentDataType === 'waterlevel' ? '🌊' : '🔴';
 
         const modeSelector = document.getElementById('mode-selector');
@@ -54,6 +55,8 @@ async function init() {
             <option value="max60">期間中最大60分降水量</option>
             <option value="max24">期間中最大24時間降水量</option>
             <option value="cumulative">期間中累加雨量 (総雨量)</option>
+            <option value="rprime">🔶 R' リアルタイム (土砂災害危険度)</option>
+            <option value="rprimeMax">🔶 R' 期間最大値</option>
         ` : `
             <option value="current">リアルタイム水位</option>
             <option value="maxPeriod">期間内最高水位</option>
@@ -337,6 +340,24 @@ function updateFrame(timestamp) {
                 value = displayValue = raw;
                 if (isWaterLevel) levelStatus = getWaterLevelStatus(raw, station.thresholds);
             }
+        } else if (mode === 'rprime') {
+            // R' リアルタイム
+            const raw = rainfallData?.timeSeriesRprime?.[timestamp]?.[station.name];
+            if (raw === null || raw === undefined) {
+                isMissing = isDisplayMissing = true;
+            } else {
+                value = displayValue = raw;
+                levelStatus = getRprimeStatus(raw);
+            }
+        } else if (mode === 'rprimeMax') {
+            // R' 期間最大値
+            const summary = rainfallData?.summary?.[station.row];
+            if (!summary || summary.maxRprime === null || summary.maxRprime === undefined) {
+                isMissing = isDisplayMissing = true;
+            } else {
+                displayValue = value = summary.maxRprime;
+                levelStatus = summary.maxRprimeLevel || getRprimeStatus(value);
+            }
         } else {
             const summary = isWaterLevel ? activeData.summary[idx] : activeData.summary[station.row];
             if (!summary) {
@@ -359,8 +380,15 @@ function updateFrame(timestamp) {
             }
         }
 
-        const color      = isDisplayMissing ? '#888' : (isWaterLevel ? getWaterLevelColor(levelStatus) : getRainfallColor(displayValue));
-        const formatter  = (v) => isWaterLevel ? v.toFixed(2) : v.toFixed(mode === 'max24' ? 1 : 0);
+        const isRprime    = (mode === 'rprime' || mode === 'rprimeMax');
+        const color      = isDisplayMissing ? '#888'
+            : isRprime    ? getRprimeColor(levelStatus)
+            : isWaterLevel ? getWaterLevelColor(levelStatus)
+            : getRainfallColor(displayValue);
+        const formatter  = (v) =>
+            (isWaterLevel && !isRprime) ? v.toFixed(2)
+            : isRprime ? v.toFixed(1)
+            : v.toFixed(mode === 'max24' ? 1 : 0);
         const displayVal = isDisplayMissing ? '---' : formatter(displayValue);
 
         const icon = L.divIcon({
@@ -372,7 +400,17 @@ function updateFrame(timestamp) {
         if ((mode === 'cumulative' && !isWaterLevel) || (mode === 'maxPeriod' && isWaterLevel)) {
             marker.bindTooltip('クリックしてグラフを表示', { direction: 'top', sticky: true });
             marker.on('click', () => openChartModal(station, timestamps, activeData, isWaterLevel));
-        } else if (mode !== 'current') {
+        } else if (mode === 'rprimeMax') {
+            // R' 期間最大値: 記録日時をツールチップで表示
+            const summary = rainfallData?.summary?.[station.row];
+            if (summary?.maxRprimeTime) {
+                const tsParts = summary.maxRprimeTime.split(' ');
+                const fmtTime = tsParts.length >= 2
+                    ? `${parseInt(tsParts[0].substring(4,6))}/${parseInt(tsParts[0].substring(6,8))} ${tsParts[1]}`
+                    : summary.maxRprimeTime;
+                marker.bindTooltip(`R'最大記録: ${fmtTime}`, { direction: 'top', sticky: true });
+            }
+        } else if (mode !== 'current' && mode !== 'rprime') {
             const summary = isWaterLevel ? activeData.summary[idx] : activeData.summary[station.row];
             if (summary) {
                 const peakTime = isWaterLevel
@@ -391,6 +429,12 @@ function updateFrame(timestamp) {
         markers.push(marker);
         if (!isMissing) stations.push({ lat: station.lat, lon: station.lon, value, station, levelStatus });
     });
+
+    // --- 凡例表示切替 ---
+    const isRprimeModeActive = (mode === 'rprime' || mode === 'rprimeMax');
+    document.getElementById('legend-rainfall').classList.toggle('legend-hidden', isWaterLevel || isRprimeModeActive);
+    document.getElementById('legend-waterlevel').classList.toggle('legend-hidden', !isWaterLevel);
+    document.getElementById('legend-rprime').classList.toggle('legend-hidden', !isRprimeModeActive);
 
     if (isWaterLevel) {
         if (isolineLayer) { map.removeLayer(isolineLayer); isolineLayer = null; }

@@ -35,6 +35,53 @@ export function getWaterLevelColor(status) {
     return colors[status] ?? colors.none;
 }
 
+// --- 雨量指標 R' 用カラー関数 ---
+
+export function getRprimeStatus(rprime) {
+    if (rprime === null || rprime === undefined) return 'normal';
+    if (rprime >= 250) return 'danger';
+    if (rprime >= 175) return 'caution';
+    if (rprime >= 125) return 'watch';
+    return 'normal';
+}
+
+export function getRprimeColor(status) {
+    const colors = {
+        danger:  '#ff0033',  // 土石流 — 赤
+        caution: '#ff6600',  // 山地崩壊 — 橙
+        watch:   '#ffcc00',  // がけ崩れ — 黄
+        normal:  '#00ddcc',  // 平常 — 水色
+    };
+    return colors[status] ?? colors.normal;
+}
+
+export function getSmoothRprimeColor(v) {
+    const points = [
+        { v: 0,   r: 0,   g: 221, b: 204, a: 0.0  },
+        { v: 50,  r: 0,   g: 221, b: 204, a: 0.05 },
+        { v: 125, r: 255, g: 204, b: 0,   a: 0.30 },
+        { v: 175, r: 255, g: 102, b: 0,   a: 0.45 },
+        { v: 250, r: 255, g: 0,   b: 51,  a: 0.60 },
+        { v: 400, r: 180, g: 0,   b: 80,  a: 0.75 },
+    ];
+    if (v <= points[0].v) return points[0];
+    if (v >= points[points.length - 1].v) return points[points.length - 1];
+    for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i], p2 = points[i + 1];
+        if (v >= p1.v && v <= p2.v) {
+            const t = (v - p1.v) / (p2.v - p1.v);
+            return {
+                r: Math.round(p1.r + t * (p2.r - p1.r)),
+                g: Math.round(p1.g + t * (p2.g - p1.g)),
+                b: Math.round(p1.b + t * (p2.b - p1.b)),
+                a: p1.a + t * (p2.a - p1.a)
+            };
+        }
+    }
+    return points[0];
+}
+
+
 export function getSmoothRainfallColor(v) {
     const points = [
         { v: 0,   r: 51,  g: 153, b: 255, a: 0.0 },
