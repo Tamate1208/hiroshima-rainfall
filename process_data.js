@@ -35,7 +35,12 @@ async function downloadFile(dateStr, type = 'uryo') {
         const response = await axios({
             method: 'get',
             url: url,
-            responseType: 'arraybuffer'
+            responseType: 'arraybuffer',
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*'
+            }
         });
         try { fs.unlinkSync(dest); } catch (_) {}
         fs.writeFileSync(dest, response.data);
@@ -45,6 +50,7 @@ async function downloadFile(dateStr, type = 'uryo') {
         return null;
     }
 }
+
 
 async function processRange(startDateStr, endDateStr) {
     const mapping = JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8'));

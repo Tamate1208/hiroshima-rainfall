@@ -401,29 +401,9 @@ async function init() {
         document.getElementById('end-date').value = e.target.value;
     });
 
-    // 初回自動データ更新
-    try {
-        const initialLoading = document.getElementById('initial-loading');
-        if (initialLoading) initialLoading.classList.remove('hidden');
-        
-        const base = `${location.protocol}//${location.hostname}:${location.port}`;
-        const res = await fetch(`${base}/api/update-data`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ start: yesterdayStr, end: todayStr })
-        });
-        
-        if (!res.ok) {
-            console.warn("Initial data update failed, falling back to local data.");
-        }
-    } catch (e) {
-        console.error("Initial data update error:", e);
-    } finally {
-        const initialLoading = document.getElementById('initial-loading');
-        if (initialLoading) initialLoading.classList.add('hidden');
-    }
-
     await loadData();
+    const initialLoading = document.getElementById('initial-loading');
+    if (initialLoading) initialLoading.classList.add('hidden');
 
     document.getElementById('timeline').addEventListener('input', (e) => updateFrame(timestamps[e.target.value]));
     document.getElementById('mode-selector').addEventListener('change', () => updateFrame(timestamps[document.getElementById('timeline').value]));
@@ -448,14 +428,14 @@ async function init() {
         const btn   = document.getElementById('update-data');
         btn.disabled = true; btn.innerText = '取得中...';
         try {
-            const base = `${location.protocol}//${location.hostname}:${location.port}`;
-            const res  = await fetch(`${base}/api/update-data`, {
+            const res = await fetch('/api/update-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ start, end })
             });
             if (res.ok) {
                 await loadData();
+
                 // データ更新に成功したら設定パネルを隠す
                 document.getElementById('settings-body').classList.add('settings-hidden');
                 document.getElementById('toggle-settings').innerText = '▼';

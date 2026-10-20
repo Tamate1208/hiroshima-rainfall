@@ -22,8 +22,15 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
 });
 
+// 同時実行ロック（Render 512MB RAM 環境での OOM 多重起動防止）
+let isUpdating = false;
+
 // データ更新エンドポイント — 広島県サイトから xlsx をダウンロードして処理
 app.post('/api/update-data', (req, res) => {
+    if (isUpdating) {
+        return res.status(429).json({ error: '現在データ更新処理が実行中です。完了するまでしばらくお待ちください。' });
+    }
+
     const { start, end } = req.body;
     console.log(`[API] Update requested: ${start} to ${end}`);
 
@@ -38,6 +45,8 @@ app.post('/api/update-data', (req, res) => {
     if (diffDays > 31) {
         return res.status(400).json({ error: '取得期間は最大31日です' });
     }
+
+    isUpdating = true;
 
     // process_data.js はプロジェクトルートに配置
     const scriptPath = path.join(PROJECT_ROOT, 'process_data.js');
@@ -62,6 +71,7 @@ app.post('/api/update-data', (req, res) => {
     });
 
     child.on('close', (code) => {
+        isUpdating = false;
         if (code !== 0) {
             console.error(`[API] Process exited with code ${code}`);
             return res.status(500).json({ error: `プロセスがエラーで終了しました (code ${code})`, stderr });
@@ -71,12 +81,14 @@ app.post('/api/update-data', (req, res) => {
     });
 
     child.on('error', (err) => {
+        isUpdating = false;
         console.error(`[API] Spawn error: ${err}`);
         res.status(500).json({ error: err.message });
     });
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
     console.log(`\n🌧  広島県内雨量可視＋`);
     console.log(`   http://localhost:${port}\n`);
 });
+

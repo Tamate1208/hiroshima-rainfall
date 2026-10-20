@@ -1,0 +1,4 @@
+:root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #14b8a6; }
+html.light { --bg: #f1f5f9; --card: #ffffff; --text: #0f172a; --accent: #0d9488; }
+body { font-family: sans-serif; background: var(--bg); color: var(--text); padding: 16px; }
+.card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 14px; }

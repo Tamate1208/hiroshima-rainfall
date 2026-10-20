@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hiroshima-rainfall — モバイル対応MVP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🏔️ hiroshima-rainfall</h1>
+    <button id="themeToggleBtn" aria-label="ダークモード切替" class="icon-btn">🌙 Dark</button>
+  </header>
+  <main class="app-main">
+    <section class="card">
+      <h2>✨ クイック記録・アイテム追加</h2>
+      <div class="form-group">
+        <input type="text" id="itemInput" aria-label="記録内容を入力" placeholder="記録・メモを入力..." />
+        <button id="addBtn" aria-label="保存する" class="primary-btn">＋ 保存</button>
+      </div>
+      <p id="offlineBadge" class="status-ok">🟢 オフライン自動保存有効</p>
+    </section>
+    <section class="card">
+      <h2>📋 保存済みリスト</h2>
+      <ul id="itemList" class="item-list"></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

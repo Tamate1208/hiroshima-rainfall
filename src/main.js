@@ -77,51 +77,38 @@ async function init() {
         }
     });
 
-    // 日付初期値を昨日〜今日に設定
-    const now = new Date();
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
+    // 保存済みデータをまず即座に読み込んで地図を表示（初期ロードのブロッキングを完全排除）
+    await loadData();
+    const initialLoading = document.getElementById('initial-loading');
+    if (initialLoading) initialLoading.classList.add('hidden');
 
+    // 日付初期値を保存済みデータの期間（range）または昨日〜今日に設定
     const fmt = (d) => d.getFullYear() + '-' +
                        String(d.getMonth() + 1).padStart(2, '0') + '-' +
                        String(d.getDate()).padStart(2, '0');
 
-    const startStr = fmt(yesterday);
-    const endStr = fmt(now);
+    let startStr, endStr;
+    if (rainfallData?.range?.start && rainfallData?.range?.end) {
+        startStr = rainfallData.range.start;
+        endStr = rainfallData.range.end;
+    } else {
+        const now = new Date();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        startStr = fmt(yesterday);
+        endStr = fmt(now);
+    }
 
     document.getElementById('start-date').value = startStr;
     document.getElementById('end-date').value   = endStr;
 
-    document.getElementById('current-date').innerText =
-        `対象データ期間: ${startStr.replace(/-/g, '/')} ～ ${endStr.replace(/-/g, '/')}`;
+    const fmtDate = (v) => v ? v.replace(/-/g, '/').replace(/\/0/g, '/') : '';
+    const dateLabel = startStr === endStr ? fmtDate(startStr) : `${fmtDate(startStr)} ～ ${fmtDate(endStr)}`;
+    document.getElementById('current-date').innerText = `対象データ期間: ${dateLabel}`;
 
     document.getElementById('start-date').addEventListener('change', (e) => {
         document.getElementById('end-date').value = e.target.value;
     });
-
-    // 初回自動データ更新
-    try {
-        const initialLoading = document.getElementById('initial-loading');
-        if (initialLoading) initialLoading.classList.remove('hidden');
-        
-        const base = `${location.protocol}//${location.hostname}:${location.port}`;
-        const res = await fetch(`${base}/api/update-data`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ start: startStr, end: endStr })
-        });
-        
-        if (!res.ok) {
-            console.warn("Initial data update failed, falling back to local data.");
-        }
-    } catch (e) {
-        console.error("Initial data update error:", e);
-    } finally {
-        const initialLoading = document.getElementById('initial-loading');
-        if (initialLoading) initialLoading.classList.add('hidden');
-    }
-
-    await loadData();
 
     document.getElementById('timeline').addEventListener('input', (e) =>
         updateFrame(timestamps[e.target.value])
@@ -168,8 +155,8 @@ async function init() {
         btn.disabled = true; btn.innerText = '取得中...';
 
         try {
-            const base = `${location.protocol}//${location.hostname}:${location.port}`;
-            const res  = await fetch(`${base}/api/update-data`, {
+            // Render (HTTPS) やローカル環境で確実に動作する相対パスを使用
+            const res = await fetch('/api/update-data', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body:    JSON.stringify({ start, end })
@@ -178,7 +165,6 @@ async function init() {
                 await loadData();
                 document.getElementById('settings-body').classList.add('settings-hidden');
                 document.getElementById('toggle-settings').innerText = '▼';
-                const fmtDate = (v) => v ? v.replace(/-/g, '/').replace(/\/0/g, '/') : '';
                 const dateLabel = start === end ? fmtDate(start) : `${fmtDate(start)} ～ ${fmtDate(end)}`;
                 document.getElementById('current-date').innerText = `対象データ期間: ${dateLabel}`;
             } else {
@@ -192,6 +178,7 @@ async function init() {
             btn.innerText = 'データ更新'; btn.disabled = false;
         }
     });
+
 
     map.on('zoomend', () => { updateZoomStyles(); if (currentTimestamp) updateFrame(currentTimestamp); });
     updateZoomStyles();
