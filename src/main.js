@@ -30,7 +30,7 @@ async function init() {
             .setView([34.5, 132.8], 10);
 
     const themes = {
-        dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        dark:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
     };
     baseLayer = L.tileLayer(themes.dark).addTo(map);
@@ -40,6 +40,7 @@ async function init() {
         baseLayer.setUrl(themes[theme]);
         document.body.classList.toggle('light-theme', theme === 'light');
     });
+
 
     document.getElementById('datatype-selector').addEventListener('change', (e) => {
         currentDataType = e.target.value;

@@ -103,10 +103,19 @@ header p {
     box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
+/* ================================================================
+   ベースマップ ダークモードフィルター（APIキー不要）
+   ※ leaflet-tile-pane のみに適用するため、マーカーや等雨量線・UIの色は保持
+=============================================================== */
+body:not(.light-theme) .leaflet-tile-pane {
+    filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3);
+}
+
 /* Light Theme Overrides */
 .light-theme #map {
     filter: none;
 }
+
 
 .light-theme .glass {
     background: rgba(255, 255, 255, 0.85);
