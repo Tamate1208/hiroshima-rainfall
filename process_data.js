@@ -199,7 +199,7 @@ async function processRange(startDateStr, endDateStr) {
                 timeSeries[ts][station.name] = null;
             }
 
-            // --- 24時間ローリング (JMA基準: 80%以上) ---
+            // --- 24時間ローリング (JMA基準: 80%以上 = 116スロット以上) ---
             const win24Full = values.slice(Math.max(0, i - 143), i + 1);
             const win24Valid = win24Full.filter(v => v !== null);
             
@@ -211,8 +211,12 @@ async function processRange(startDateStr, endDateStr) {
                     stationMaxes[row].max24RawTime = ts;
                 }
                 
-                // JMA補間値（80%以上で推定）の記録
-                const estimatedSum = Math.round((rawSum * (144 / win24Valid.length)) * 10) / 10;
+                // JMA補間値（過去24時間144コマ中80%以上＝116コマ以上有効な場合のみ推定）
+                // 116コマ未満（期間開始直後や大量欠測時）は実測値合算(rawSum)を採用し、異常な線形倍率爆発を防止
+                const estimatedSum = (win24Valid.length >= Math.ceil(144 * 0.8))
+                    ? Math.round((rawSum * (144 / win24Valid.length)) * 10) / 10
+                    : rawSum;
+
                 if (stationMaxes[row].max24 === null || estimatedSum > stationMaxes[row].max24) {
                     stationMaxes[row].max24 = estimatedSum;
                     stationMaxes[row].max24Time = ts;
@@ -224,7 +228,11 @@ async function processRange(startDateStr, endDateStr) {
         if (allValid.length > 0) {
             const rawSum = allValid.reduce((a, b) => a + b, 0);
             stationMaxes[row].cumulativeRaw = rawSum;
-            stationMaxes[row].cumulative = Math.round((rawSum * (values.length / allValid.length)) * 10) / 10;
+            // 全期間の80%以上データがある場合のみ線形補正、それ以外は実測合計
+            const validRatio = allValid.length / values.length;
+            stationMaxes[row].cumulative = (validRatio >= 0.8)
+                ? Math.round((rawSum * (values.length / allValid.length)) * 10) / 10
+                : rawSum;
         }
     });
 

@@ -91,7 +91,7 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
         const longestSeg = iso.segments.reduce(
             (best, seg) => seg.length > best.length ? seg : best, []
         );
-        if (longestSeg.length > 8) {
+        if (longestSeg.length > 5) {
             const mid = longestSeg[Math.floor(longestSeg.length / 2)];
             const isCriteria = criteria && iso.value === criteria;
             const label = isCriteria

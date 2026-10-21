@@ -32,10 +32,10 @@ export const RR_THRESHOLDS = {
 
 
 export const THRESHOLDS_BY_MODE = {
-    current:    [1, 5, 10, 20],
-    max60:      [1, 5, 10, 20, 30, 50],
-    max24:      [10, 20, 50, 80, 100, 150, 200, 250],
-    cumulative: [10, 50, 100, 200, 300, 400, 500]
+    current:    [1, 5, 10, 20, 30, 50],
+    max60:      [1, 5, 10, 20, 30, 50, 80],
+    max24:      [5, 10, 20, 30, 50, 80, 100, 150, 200, 250],
+    cumulative: [5, 10, 20, 30, 50, 80, 100, 150, 200, 300, 400, 500]
 };
 
 export const GRID = {
@@ -49,8 +49,8 @@ export const LON_STEP = (GRID.maxLon - GRID.minLon) / GRID.cols;
 export const LAT_STEP = (GRID.maxLat - GRID.minLat) / GRID.rows;
 
 export const TPS_CONFIG = {
-    LAMBDA: 1.0,         // 平滑化係数
-    AGGREGATION_KM: 3.0  // 近接局統合距離しきい値
+    LAMBDA: 0.1,         // 平滑化係数（観測点実測値への忠実性を向上）
+    AGGREGATION_KM: 0.5  // 近接局統合距離しきい値（同一地点近接局の数値安定化のみに絞り、不要な平均化を防止）
 };
 
 // 外挿域マスク: 凸包バッファ半径 (km)

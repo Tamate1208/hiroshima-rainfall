@@ -28,6 +28,41 @@ function joinSegments(segments) {
     return lines;
 }
 
+/**
+ * Chaikin のコーナースムージング
+ * 元の折れ線の凸包の内側に厳密に収まるため、ベジェスプラインのような外側への飛び出し（オーバーシュート）が原理的に起きない
+ */
+function chaikinSmooth(points, iterations = 2) {
+    if (points.length < 3) return points;
+    let current = points;
+    for (let it = 0; it < iterations; it++) {
+        const next = [];
+        const isClosed = Math.abs(current[0][0] - current[current.length - 1][0]) < 1e-7 &&
+                         Math.abs(current[0][1] - current[current.length - 1][1]) < 1e-7;
+        
+        if (isClosed) {
+            for (let i = 0; i < current.length - 1; i++) {
+                const p0 = current[i];
+                const p1 = current[i + 1];
+                next.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
+                next.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
+            }
+            next.push([...next[0]]);
+        } else {
+            next.push(current[0]);
+            for (let i = 0; i < current.length - 1; i++) {
+                const p0 = current[i];
+                const p1 = current[i + 1];
+                next.push([0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1]]);
+                next.push([0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1]]);
+            }
+            next.push(current[current.length - 1]);
+        }
+        current = next;
+    }
+    return current;
+}
+
 export function getIsolines(grid, thresholds) {
     const results = [];
     const { cols, rows } = GRID;
@@ -77,15 +112,7 @@ export function getIsolines(grid, thresholds) {
 
         if (rawSegments.length > 0) {
             const joined = joinSegments(rawSegments);
-            const smoothed = joined.map(pts => {
-                if (pts.length < 3) return pts;
-                try {
-                    const spline = turf.bezierSpline(turf.lineString(pts), { resolution: 10000, sharpness: 0.8 });
-                    return spline.geometry.coordinates;
-                } catch (e) {
-                    return pts;
-                }
-            });
+            const smoothed = joined.map(pts => chaikinSmooth(pts, 2));
             results.push({ value: threshold, segments: smoothed });
         }
     });
