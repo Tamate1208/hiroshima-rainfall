@@ -4,7 +4,7 @@
 
 import { getRainfallColor, getWaterLevelColor, getWaterLevelStatus, getRprimeColor, getRprimeStatus } from './colors.js';
 import { renderIsolines, renderRivers } from './rendering.js';
-import { updateAdoptionPanel, exportCSV } from './panel.js';
+import { updateAdoptionPanel, exportCSV, exportPDF } from './panel.js';
 import { openChartModal } from './chart.js';
 
 // --- グローバル状態 ---
@@ -204,6 +204,7 @@ async function init() {
     });
 
     document.getElementById('export-csv').addEventListener('click', exportCSV);
+    document.getElementById('export-pdf').addEventListener('click', exportPDF);
     document.getElementById('toggle-panel').addEventListener('click', () => {
         const body   = document.getElementById('panel-body');
         const btn    = document.getElementById('toggle-panel');

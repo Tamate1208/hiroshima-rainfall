@@ -185,3 +185,144 @@ export function exportCSV() {
     a.click();
     URL.revokeObjectURL(url);
 }
+
+/**
+ * 市町毎にグループ化された帳票形式のPDF出力
+ * ブラウザ標準の印刷レンダリングエンジンを活用し、日本語文字化けゼロ＆A4帳票レイアウトでPDF出力
+ */
+export function exportPDF() {
+    const data = _adoptionExportData;
+    if (!data || !data.exceeded.length) {
+        alert('出力対象の採択基準超過局データがありません。');
+        return;
+    }
+
+    const filtered = (_selectedCities.size > 0)
+        ? data.exceeded.filter(s => _selectedCities.has(s.city))
+        : data.exceeded;
+    if (!filtered.length) {
+        alert('選択された地域に対象局がありません。');
+        return;
+    }
+
+    const isWater = data.dataType === 'waterlevel';
+    const isRprime = (data.mode === 'rprime' || data.mode === 'rprimeMax');
+    const modeLabel = isRprime ? "R'土砂災害危険度 (基準超過)"
+        : isWater ? "危険水位超過"
+        : data.mode === 'max24' ? "24時間降水量 (採択基準 80mm)"
+        : data.mode === 'max60' ? "1時間降水量 (採択基準 20mm)"
+        : "リアルタイム降水量 (採択基準 20mm)";
+
+    const valueHeader = isRprime ? "R'値 (mm)"
+        : isWater ? "水位 (m)"
+        : data.mode === 'max24' ? "24時間雨量 (mm)"
+        : "時間雨量 (mm)";
+
+    // 市町ごとにグルーピング
+    const byCity = {};
+    filtered.forEach(s => {
+        const city = s.city || 'その他';
+        if (!byCity[city]) byCity[city] = [];
+        byCity[city].push(s);
+    });
+
+    // 市町名順にソートし、市町内の観測局は雨量降順でソート
+    const sortedCities = Object.keys(byCity).sort((a, b) => a.localeCompare(b, 'ja'));
+    sortedCities.forEach(city => {
+        byCity[city].sort((a, b) => (b.val || 0) - (a.val || 0));
+    });
+
+    // 出力日時 (JST)
+    const nowJST = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const printedAt = nowJST.toISOString().replace('T', ' ').substring(0, 16).replace(/-/g, '/');
+
+    // 期間ラベル
+    const dateLabelEl = document.getElementById('current-date');
+    const periodText = dateLabelEl ? dateLabelEl.innerText.replace('対象データ期間: ', '') : '';
+
+    // 帳票HTML生成
+    let html = `
+        <div class="print-page">
+            <header class="print-header">
+                <div class="print-title-row">
+                    <h1 class="print-main-title">広島県 採択基準超過局一覧表（市町別）</h1>
+                    <span class="print-badge">公的帳票形式</span>
+                </div>
+                <div class="print-meta-grid">
+                    <div class="print-meta-item"><span class="print-meta-label">基準種別:</span> <span class="print-meta-val">${modeLabel}</span></div>
+                    <div class="print-meta-item"><span class="print-meta-label">対象期間:</span> <span class="print-meta-val">${periodText}</span></div>
+                    <div class="print-meta-item"><span class="print-meta-label">出力日時:</span> <span class="print-meta-val">${printedAt}</span></div>
+                    <div class="print-meta-item"><span class="print-meta-label">集計結果:</span> <span class="print-meta-val"><strong>${filtered.length}局</strong>（${sortedCities.length} 市町）</span></div>
+                </div>
+            </header>
+
+            <main class="print-content">
+    `;
+
+    sortedCities.forEach(city => {
+        const stations = byCity[city];
+        html += `
+            <section class="print-city-section">
+                <div class="print-city-header">
+                    <h2 class="print-city-name">■ ${city}</h2>
+                    <span class="print-city-badge">超過局数: ${stations.length}局</span>
+                </div>
+                <table class="print-table">
+                    <thead>
+                        <tr>
+                            <th class="th-p-name">観測局名</th>
+                            <th class="th-p-val">${valueHeader}</th>
+                            <th class="th-p-status">基準判定</th>
+                            <th class="th-p-time">ピーク記録日時</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        stations.forEach(s => {
+            let valDisp;
+            if (isRprime) valDisp = s.val !== null ? s.val.toFixed(1) : '---';
+            else if (isWater) valDisp = s.val !== null ? s.val.toFixed(2) : '---';
+            else valDisp = s.val !== null ? s.val.toFixed(data.mode === 'max24' ? 1 : 0) : '---';
+
+            const statusText = isRprime ? (s.levelStatus === 'danger' ? '土石流危険' : s.levelStatus === 'caution' ? '山地崩壊注意' : 'がけ崩れ警戒')
+                : isWater ? (s.levelStatus === 'danger' ? '氾濫危険' : s.levelStatus === 'evacuation' ? '避難判断' : s.levelStatus === 'warning' ? '氾濫警戒' : '水防団待機')
+                : '基準超過';
+
+            html += `
+                <tr>
+                    <td class="td-p-name"><strong>${s.name}</strong></td>
+                    <td class="td-p-val"><strong>${valDisp}</strong></td>
+                    <td class="td-p-status"><span class="print-status-tag">${statusText}</span></td>
+                    <td class="td-p-time">${formatPeakTime(s.time)}</td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </section>
+        `;
+    });
+
+    html += `
+            </main>
+            <footer class="print-footer">
+                <span>広島県内雨量可視＋ (Hiroshima Rainfall Monitor)</span>
+                <span>※本資料は広島県防災Web公表データに基づき自動集計されたものです。</span>
+            </footer>
+        </div>
+    `;
+
+    let printDiv = document.getElementById('print-report-container');
+    if (!printDiv) {
+        printDiv = document.createElement('div');
+        printDiv.id = 'print-report-container';
+        document.body.appendChild(printDiv);
+    }
+    printDiv.innerHTML = html;
+
+    // 印刷ダイアログの起動（ユーザーは「PDFとして保存」を選択可能）
+    window.print();
+}

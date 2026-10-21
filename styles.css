@@ -992,3 +992,159 @@ select {
     to { transform: rotate(360deg); }
 }
 
+/* ================================================================
+   市町別PDF出力・帳票印刷スタイル (@media print)
+=============================================================== */
+#print-report-container {
+    display: none;
+}
+
+@media print {
+    /* 画面上の全要素を印刷から除外 */
+    body > *:not(#print-report-container) {
+        display: none !important;
+    }
+
+    /* 印刷コンテナのみをA4ページ全体に展開 */
+    #print-report-container {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        background: #ffffff !important;
+        color: #111827 !important;
+        font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', 'Yu Gothic', sans-serif !important;
+        font-size: 10.5pt;
+        line-height: 1.5;
+        padding: 0;
+        margin: 0;
+    }
+
+    .print-page {
+        padding: 10mm 15mm;
+    }
+
+    .print-header {
+        border-bottom: 2px solid #1e3a8a;
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+    }
+
+    .print-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .print-main-title {
+        font-size: 16pt;
+        font-weight: 800;
+        color: #1e3a8a;
+        margin: 0;
+    }
+
+    .print-badge {
+        font-size: 8pt;
+        background: #e0e7ff;
+        color: #1e40af;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 700;
+    }
+
+    .print-meta-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 16px;
+        font-size: 9pt;
+        background: #f8fafc;
+        padding: 6px 10px;
+        border-radius: 4px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .print-meta-label {
+        font-weight: 700;
+        color: #4b5563;
+    }
+
+    .print-meta-val {
+        color: #111827;
+    }
+
+    .print-city-section {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: 18px;
+    }
+
+    .print-city-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        background: #f1f5f9;
+        padding: 4px 10px;
+        border-left: 4px solid #2563eb;
+        margin-bottom: 6px;
+    }
+
+    .print-city-name {
+        font-size: 11pt;
+        font-weight: 700;
+        color: #0f172a;
+        margin: 0;
+    }
+
+    .print-city-badge {
+        font-size: 8.5pt;
+        color: #475569;
+        font-weight: 600;
+    }
+
+    .print-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9pt;
+        margin-bottom: 4px;
+    }
+
+    .print-table th, .print-table td {
+        border: 1px solid #cbd5e1;
+        padding: 5px 8px;
+        text-align: left;
+    }
+
+    .print-table th {
+        background: #f8fafc;
+        font-weight: 700;
+        color: #334155;
+    }
+
+    .th-p-name, .td-p-name { width: 32%; }
+    .th-p-val, .td-p-val { width: 22%; text-align: right; }
+    .th-p-status, .td-p-status { width: 20%; text-align: center; }
+    .th-p-time, .td-p-time { width: 26%; text-align: center; }
+
+    .print-status-tag {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 8pt;
+        font-weight: 700;
+        background: #fee2e2;
+        color: #b91c1c;
+        border: 1px solid #fca5a5;
+    }
+
+    .print-footer {
+        display: flex;
+        justify-content: space-between;
+        border-top: 1px solid #cbd5e1;
+        padding-top: 8px;
+        margin-top: 24px;
+        font-size: 8pt;
+        color: #64748b;
+    }
+}
+
+
