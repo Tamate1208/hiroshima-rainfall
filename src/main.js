@@ -83,32 +83,38 @@ async function init() {
     const initialLoading = document.getElementById('initial-loading');
     if (initialLoading) initialLoading.classList.add('hidden');
 
-    // 日付初期値を保存済みデータの期間（range）または昨日〜今日に設定
+    // アクセス時点のJST（日本時間）を基準に「昨日〜今日（2日間）」を算出
+    const now = new Date();
+    const jstOffset = 9 * 60; // 分
+    const localOffset = now.getTimezoneOffset(); // 分
+    const jstNow = new Date(now.getTime() + (jstOffset + localOffset) * 60 * 1000);
+    const jstYesterday = new Date(jstNow);
+    jstYesterday.setDate(jstYesterday.getDate() - 1);
+
     const fmt = (d) => d.getFullYear() + '-' +
                        String(d.getMonth() + 1).padStart(2, '0') + '-' +
                        String(d.getDate()).padStart(2, '0');
 
-    let startStr, endStr;
-    if (rainfallData?.range?.start && rainfallData?.range?.end) {
-        startStr = rainfallData.range.start;
-        endStr = rainfallData.range.end;
-    } else {
-        const now = new Date();
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-        startStr = fmt(yesterday);
-        endStr = fmt(now);
-    }
+    const yesterdayStr = fmt(jstYesterday);
+    const todayStr     = fmt(jstNow);
 
-    document.getElementById('start-date').value = startStr;
-    document.getElementById('end-date').value   = endStr;
+    // 取得フォームの初期値は常に「昨日〜今日（二日間）」に設定
+    document.getElementById('start-date').value = yesterdayStr;
+    document.getElementById('end-date').value   = todayStr;
 
+    // 表示中データの期間ラベル（保存済みデータのrangeがあればそれを表示、なければ昨日〜今日）
+    const dataStart = rainfallData?.range?.start || yesterdayStr;
+    const dataEnd   = rainfallData?.range?.end   || todayStr;
     const fmtDate = (v) => v ? v.replace(/-/g, '/').replace(/\/0/g, '/') : '';
-    const dateLabel = startStr === endStr ? fmtDate(startStr) : `${fmtDate(startStr)} ～ ${fmtDate(endStr)}`;
+    const dateLabel = dataStart === dataEnd ? fmtDate(dataStart) : `${fmtDate(dataStart)} ～ ${fmtDate(dataEnd)}`;
     document.getElementById('current-date').innerText = `対象データ期間: ${dateLabel}`;
 
+    // 手動期間変更時の操作性改善: 開始日が終了日より未来になった場合のみ終了日を開始日に合わせる
     document.getElementById('start-date').addEventListener('change', (e) => {
-        document.getElementById('end-date').value = e.target.value;
+        const endDateEl = document.getElementById('end-date');
+        if (endDateEl.value < e.target.value) {
+            endDateEl.value = e.target.value;
+        }
     });
 
     document.getElementById('timeline').addEventListener('input', (e) =>
