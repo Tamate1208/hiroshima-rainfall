@@ -13,6 +13,7 @@ const MAPPING_FILE = path.join(PROJECT_ROOT, 'mapping.json');
 const OUTPUT_FILE  = path.join(PROJECT_ROOT, 'rainfall_data.json');
 const WATERLEVEL_MAPPING = path.join(PROJECT_ROOT, 'waterlevel_mapping.json');
 const WATERLEVEL_OUTPUT  = path.join(PROJECT_ROOT, 'waterlevel_data.json');
+const ADJACENT_FILE      = path.join(PROJECT_ROOT, 'adjacent_stations.json');
 const DOWNLOAD_DIR = path.join(PROJECT_ROOT, 'temp_downloads');
 
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR);
@@ -317,8 +318,88 @@ async function processRange(startDateStr, endDateStr) {
         console.log(`Summary: ${faultyStations.length} stations marked as faulty.`);
     }
 
+    // --- 中国地方（岡山・島根・鳥取・山口）アメダス局データの合成 ---
+    await mergeAdjacentStations(output);
+
     fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output));
     console.log(`Success! Data written to ${OUTPUT_FILE}`);
+}
+
+async function fetchAmedasPrecipitation() {
+    try {
+        const timeRes = await axios.get("https://www.jma.go.jp/bosai/amedas/data/latest_time.txt", { timeout: 8000 });
+        const latestIso = timeRes.data.trim();
+        const dt = new Date(latestIso);
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, "0");
+        const d = String(dt.getDate()).padStart(2, "0");
+        const h = String(dt.getHours()).padStart(2, "0");
+        const mi = String(dt.getMinutes()).padStart(2, "0");
+        const timeKey = `${y}${m}${d}${h}${mi}00`;
+        const mapUrl = `https://www.jma.go.jp/bosai/amedas/data/map/${timeKey}.json`;
+        const mapRes = await axios.get(mapUrl, { timeout: 8000 });
+        return { jmaData: mapRes.data, latestTimeStr: `${y}${m}${d} ${h}:${mi}` };
+    } catch (e) {
+        console.warn(`[AMeDAS] Could not fetch live JMA data: ${e.message}`);
+        return null;
+    }
+}
+
+async function mergeAdjacentStations(output) {
+    if (!fs.existsSync(ADJACENT_FILE)) return;
+    const adjacent = JSON.parse(fs.readFileSync(ADJACENT_FILE, 'utf8'));
+    console.log(`Merging ${adjacent.length} adjacent AMeDAS stations (岡山・島根・鳥取・山口)...`);
+
+    const amedasResult = await fetchAmedasPrecipitation();
+    const jmaData = amedasResult?.jmaData || {};
+    const latestTimeStr = amedasResult?.latestTimeStr || '';
+
+    const tsKeys = Object.keys(output.timeSeries).sort();
+    const latestTs = tsKeys[tsKeys.length - 1];
+
+    adjacent.forEach((s, idx) => {
+        const row = 1000 + idx;
+        const stationObj = {
+            row: row,
+            city: s.city,
+            name: s.name,
+            lon: s.lon,
+            lat: s.lat,
+            pref: s.pref,
+            type: 'amedas'
+        };
+        output.mapping.push(stationObj);
+
+        const ob = jmaData[s.id];
+        let p1h = 0, p24h = 0;
+        if (ob) {
+            p1h  = ob.precipitation1h  ? ob.precipitation1h[0]  : 0;
+            p24h = ob.precipitation24h ? ob.precipitation24h[0] : 0;
+        }
+
+        output.summary[row] = {
+            max60: p1h,
+            max60Raw: p1h,
+            max24: p24h,
+            max24Raw: p24h,
+            max60Time: latestTimeStr,
+            max60RawTime: latestTimeStr,
+            max24Time: latestTimeStr,
+            max24RawTime: latestTimeStr,
+            cumulative: p24h,
+            cumulativeRaw: p24h,
+            maxRprime: 0,
+            maxRprimeTime: '',
+            maxRprimeLevel: 'normal'
+        };
+
+        tsKeys.forEach(ts => {
+            if (!output.timeSeries[ts]) output.timeSeries[ts] = {};
+            output.timeSeries[ts][s.name] = (ts === latestTs) ? p1h : 0;
+        });
+    });
+
+    console.log(`Successfully merged adjacent stations. Total stations now: ${output.mapping.length}`);
 }
 
 async function processWaterlevelRange(startDateStr, endDateStr) {

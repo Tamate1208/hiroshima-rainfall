@@ -39,10 +39,10 @@ export const THRESHOLDS_BY_MODE = {
 };
 
 export const GRID = {
-    minLon: 131.8, maxLon: 133.6,
-    minLat: 33.9,  maxLat: 35.3,
-    cols: 150,
-    rows: 120
+    minLon: 130.8, maxLon: 134.6,
+    minLat: 33.7,  maxLat: 35.8,
+    cols: 228,
+    rows: 126
 };
 
 export const LON_STEP = (GRID.maxLon - GRID.minLon) / GRID.cols;
