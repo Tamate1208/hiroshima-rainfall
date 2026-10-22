@@ -325,22 +325,41 @@ async function processRange(startDateStr, endDateStr) {
     console.log(`Success! Data written to ${OUTPUT_FILE}`);
 }
 
-async function fetchAmedasPrecipitation() {
+async function fetchAmedasSnapshot(timeKey, targetIds, cacheDir) {
+    const cacheFile = path.join(cacheDir, `${timeKey}.json`);
+    if (fs.existsSync(cacheFile)) {
+        try {
+            return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+        } catch (_) {}
+    }
+
+    const url = `https://www.jma.go.jp/bosai/amedas/data/map/${timeKey}.json`;
     try {
-        const timeRes = await axios.get("https://www.jma.go.jp/bosai/amedas/data/latest_time.txt", { timeout: 8000 });
-        const latestIso = timeRes.data.trim();
-        const dt = new Date(latestIso);
-        const y = dt.getFullYear();
-        const m = String(dt.getMonth() + 1).padStart(2, "0");
-        const d = String(dt.getDate()).padStart(2, "0");
-        const h = String(dt.getHours()).padStart(2, "0");
-        const mi = String(dt.getMinutes()).padStart(2, "0");
-        const timeKey = `${y}${m}${d}${h}${mi}00`;
-        const mapUrl = `https://www.jma.go.jp/bosai/amedas/data/map/${timeKey}.json`;
-        const mapRes = await axios.get(mapUrl, { timeout: 8000 });
-        return { jmaData: mapRes.data, latestTimeStr: `${y}${m}${d} ${h}:${mi}` };
+        const res = await axios.get(url, {
+            timeout: 5000,
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res.data) return null;
+
+        // 【軽量化】全国1300局から対象89局の雨量数値のみを即座に抽出し、不要データは破棄
+        const extracted = {};
+        for (const id of targetIds) {
+            const ob = res.data[id];
+            if (ob) {
+                extracted[id] = {
+                    p1h:  (ob.precipitation1h  && ob.precipitation1h[0]  !== null) ? ob.precipitation1h[0]  : 0,
+                    p10m: (ob.precipitation10m && ob.precipitation10m[0] !== null) ? ob.precipitation10m[0] : 0,
+                    p24h: (ob.precipitation24h && ob.precipitation24h[0] !== null) ? ob.precipitation24h[0] : 0
+                };
+            }
+        }
+
+        try {
+            fs.writeFileSync(cacheFile, JSON.stringify(extracted));
+        } catch (_) {}
+
+        return extracted;
     } catch (e) {
-        console.warn(`[AMeDAS] Could not fetch live JMA data: ${e.message}`);
         return null;
     }
 }
@@ -348,18 +367,50 @@ async function fetchAmedasPrecipitation() {
 async function mergeAdjacentStations(output) {
     if (!fs.existsSync(ADJACENT_FILE)) return;
     const adjacent = JSON.parse(fs.readFileSync(ADJACENT_FILE, 'utf8'));
-    console.log(`Merging ${adjacent.length} adjacent AMeDAS stations (岡山・島根・鳥取・山口)...`);
-
-    const amedasResult = await fetchAmedasPrecipitation();
-    const jmaData = amedasResult?.jmaData || {};
-    const latestTimeStr = amedasResult?.latestTimeStr || '';
-
     const tsKeys = Object.keys(output.timeSeries).sort();
-    const latestTs = tsKeys[tsKeys.length - 1];
+    if (tsKeys.length === 0) return;
+
+    const targetIds = new Set(adjacent.map(s => s.id));
+    const cacheDir = path.join(DOWNLOAD_DIR, 'amedas');
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+    console.log(`Merging ${adjacent.length} adjacent AMeDAS stations across ${tsKeys.length} timestamps...`);
+
+    // ts: "YYYYMMDD HH:mm" -> timeKey: "YYYYMMDDHHmm00"
+    const timeKeyList = tsKeys.map(ts => {
+        const clean = ts.replace(/[^0-9]/g, '');
+        return { ts, timeKey: `${clean}00` };
+    });
+
+    // 並行取得（Render 512MB RAM 環境を考慮し、同時接続3本で低負荷・安全運転）
+    const snapshotsByTs = {};
+    const concurrency = 3;
+    let cursor = 0;
+
+    async function worker() {
+        while (cursor < timeKeyList.length) {
+            const item = timeKeyList[cursor++];
+            const snapshot = await fetchAmedasSnapshot(item.timeKey, targetIds, cacheDir);
+            if (snapshot) {
+                snapshotsByTs[item.ts] = snapshot;
+            }
+        }
+    }
+
+    const workers = [];
+    for (let w = 0; w < Math.min(concurrency, timeKeyList.length); w++) {
+        workers.push(worker());
+    }
+    await Promise.all(workers);
+
+    const validCount = Object.keys(snapshotsByTs).length;
+    console.log(`AMeDAS snapshots retrieved: ${validCount} / ${tsKeys.length}`);
+
+    const round1 = v => Math.round(v * 10) / 10;
 
     adjacent.forEach((s, idx) => {
         const row = 1000 + idx;
-        const stationObj = {
+        output.mapping.push({
             row: row,
             city: s.city,
             name: s.name,
@@ -367,36 +418,49 @@ async function mergeAdjacentStations(output) {
             lat: s.lat,
             pref: s.pref,
             type: 'amedas'
-        };
-        output.mapping.push(stationObj);
+        });
 
-        const ob = jmaData[s.id];
-        let p1h = 0, p24h = 0;
-        if (ob) {
-            p1h  = ob.precipitation1h  ? ob.precipitation1h[0]  : 0;
-            p24h = ob.precipitation24h ? ob.precipitation24h[0] : 0;
-        }
+        let max60 = 0, max60Time = '';
+        let max24 = 0, max24Time = '';
+        let cumulative = 0;
 
+        tsKeys.forEach(ts => {
+            const snap = snapshotsByTs[ts];
+            const data = snap ? snap[s.id] : null;
+            const p1h  = data ? data.p1h  : 0;
+            const p10m = data ? data.p10m : 0;
+            const p24h = data ? data.p24h : 0;
+
+            if (!output.timeSeries[ts]) output.timeSeries[ts] = {};
+            output.timeSeries[ts][s.name] = p1h;
+
+            if (p1h > max60) {
+                max60 = p1h;
+                max60Time = ts;
+            }
+            if (p24h > max24) {
+                max24 = p24h;
+                max24Time = ts;
+            }
+            cumulative += p10m;
+        });
+
+        const fallbackTime = tsKeys[tsKeys.length - 1] || '';
         output.summary[row] = {
-            max60: p1h,
-            max60Raw: p1h,
-            max24: p24h,
-            max24Raw: p24h,
-            max60Time: latestTimeStr,
-            max60RawTime: latestTimeStr,
-            max24Time: latestTimeStr,
-            max24RawTime: latestTimeStr,
-            cumulative: p24h,
-            cumulativeRaw: p24h,
+            max60: round1(max60),
+            max60Raw: round1(max60),
+            max60Time: max60Time || fallbackTime,
+            max60RawTime: max60Time || fallbackTime,
+            max24: round1(max24),
+            max24Raw: round1(max24),
+            max24Time: max24Time || fallbackTime,
+            max24RawTime: max24Time || fallbackTime,
+            cumulative: round1(cumulative),
+            cumulativeRaw: round1(cumulative),
             maxRprime: 0,
             maxRprimeTime: '',
             maxRprimeLevel: 'normal'
         };
-
-        tsKeys.forEach(ts => {
-            if (!output.timeSeries[ts]) output.timeSeries[ts] = {};
-            output.timeSeries[ts][s.name] = (ts === latestTs) ? p1h : 0;
-        });
     });
 
     console.log(`Successfully merged adjacent stations. Total stations now: ${output.mapping.length}`);
