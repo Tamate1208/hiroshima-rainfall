@@ -14,3 +14,6 @@ tmp/
 # OS 生成ファイル
 .DS_Store
 Thumbs.db
+
+# ログファイル
+*.log
