@@ -2,6 +2,14 @@ const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
+
+// TCP/TLS接続プール（SSLハンドシェイクを省略し、アメダス等のAPI通信を爆速化）
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 10, keepAliveMsecs: 15000 });
+const httpAgent  = new http.Agent({ keepAlive: true, maxSockets: 10, keepAliveMsecs: 15000 });
+axios.defaults.httpsAgent = httpsAgent;
+axios.defaults.httpAgent  = httpAgent;
 
 const DIAG_FILE = path.join(__dirname, 'tmp', 'diag.json');
 let diagnosticData = { rawRows: {} };
@@ -74,12 +82,12 @@ async function processRange(startDateStr, endDateStr) {
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
 
-    const filePaths = [];
+    const dates = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0].replace(/-/g, '');
-        const filePath = await downloadFile(dateStr, 'uryo');
-        if (filePath) filePaths.push(filePath);
+        dates.push(d.toISOString().split('T')[0].replace(/-/g, ''));
     }
+    const downloaded = await Promise.all(dates.map(dStr => downloadFile(dStr, 'uryo')));
+    const filePaths = downloaded.filter(Boolean);
 
     if (filePaths.length === 0) {
         console.error("No valid data files found.");
@@ -91,7 +99,7 @@ async function processRange(startDateStr, endDateStr) {
         const dateStr = fileName.split('-')[0];
         console.log(`Processing: ${fileName}`);
         
-        const workbook = XLSX.readFile(filePath);
+        const workbook = XLSX.readFile(filePath, { cellStyles: false, cellHTML: false, cellFormula: false });
         const sheetNames = ['雨量定時表1', '雨量定時表2', '雨量定時表3', '雨量定時表4'];
         
         // 1日を 144 個の null スロットで初期化 (デシンク防止)
@@ -388,9 +396,9 @@ async function mergeAdjacentStations(output) {
         return { ts, timeKey: `${clean}00` };
     });
 
-    // 並行取得（Render 512MB RAM 環境を考慮し、同時接続3本で低負荷・安全運転）
+    // 並行取得（Keep-Alive接続プールにより安全・高速に8並行処理）
     const snapshotsByTs = {};
-    const concurrency = 3;
+    const concurrency = 8;
     let cursor = 0;
 
     async function worker() {
@@ -496,12 +504,12 @@ async function processWaterlevelRange(startDateStr, endDateStr) {
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
 
-    const filePaths = [];
+    const dates = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0].replace(/-/g, '');
-        const filePath = await downloadFile(dateStr, 'suii');
-        if (filePath) filePaths.push(filePath);
+        dates.push(d.toISOString().split('T')[0].replace(/-/g, ''));
     }
+    const downloaded = await Promise.all(dates.map(dStr => downloadFile(dStr, 'suii')));
+    const filePaths = downloaded.filter(Boolean);
 
     if (filePaths.length === 0) {
         console.error("No valid water level files found.");
@@ -513,7 +521,7 @@ async function processWaterlevelRange(startDateStr, endDateStr) {
         const dateStr = fileName.split('-')[0];
         console.log(`Processing Waterlevel: ${fileName}`);
         
-        const workbook = XLSX.readFile(filePath);
+        const workbook = XLSX.readFile(filePath, { cellStyles: false, cellHTML: false, cellFormula: false });
         const sheetNames = ['水位正時表', '水位定時表1', '水位定時表2', '水位定時表3', '水位定時表4'];
         
         const dayData = {};
@@ -611,10 +619,15 @@ async function main() {
     const end = process.argv[3] || start;
     
     try {
-        await processRange(start, end);
-        await processWaterlevelRange(start, end);
+        console.time('Total Data Pipeline Time');
+        await Promise.all([
+            processRange(start, end),
+            processWaterlevelRange(start, end)
+        ]);
+        console.timeEnd('Total Data Pipeline Time');
     } catch (err) {
         console.error(err);
+        process.exit(1);
     }
 }
 
