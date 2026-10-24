@@ -27,7 +27,7 @@ let showIsolines = true; // 等雨量線の表示フラグ
 // --- 初期化 ---
 async function init() {
     map = L.map('map', { zoomControl: false, attributionControl: false })
-            .setView([34.65, 132.7], 8.5);
+            .setView([34.35, 132.8], 8.2);
 
     const themes = {
         dark:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',

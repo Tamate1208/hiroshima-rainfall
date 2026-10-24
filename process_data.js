@@ -329,7 +329,13 @@ async function fetchAmedasSnapshot(timeKey, targetIds, cacheDir) {
     const cacheFile = path.join(cacheDir, `${timeKey}.json`);
     if (fs.existsSync(cacheFile)) {
         try {
-            return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+            const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+            // 対象局がすべてキャッシュに含まれているか検証（局追加時に自動更新）
+            let hasAll = true;
+            for (const id of targetIds) {
+                if (!cached[id]) { hasAll = false; break; }
+            }
+            if (hasAll) return cached;
         } catch (_) {}
     }
 
@@ -341,7 +347,7 @@ async function fetchAmedasSnapshot(timeKey, targetIds, cacheDir) {
         });
         if (!res.data) return null;
 
-        // 【軽量化】全国1300局から対象89局の雨量数値のみを即座に抽出し、不要データは破棄
+        // 【軽量化】全国1300局から対象局の雨量数値のみを即座に抽出し、不要データは破棄
         const extracted = {};
         for (const id of targetIds) {
             const ob = res.data[id];

@@ -27,7 +27,7 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
     const isRprime   = (mode === 'rprime' || mode === 'rprimeMax');
     const criteria   = isRprime ? null : ADOPTION_CRITERIA[mode];
     const colorFn    = isRprime ? getSmoothRprimeColor : getSmoothRainfallColor;
-    const minVal     = isRprime ? 50 : 1; // R'は50mm以上から色を付ける
+    const minVal     = isRprime ? 50 : 0.5; // 0.5mmから自然にフェードイン
 
     // --- なめらかなカラーコンター塗りつぶし (Canvas ImageData オーバーレイ) ---
     const canvas = document.createElement('canvas');
@@ -47,9 +47,12 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
                 data[idx]     = color.r;
                 data[idx + 1] = color.g;
                 data[idx + 2] = color.b;
+                // 外郭フェード: 0.5mm〜2.0mm の低雨量境界をソフトにぼかす
+                const edgeFade = (!isRprime && val < 2.0) ? (val - 0.5) / 1.5 : 1.0;
                 // 基準値超過エリアは不透明度を +0.15 強調 (雨量モードのみ)
                 const extraAlpha = (!isRprime && criteria && val >= criteria) ? 0.15 : 0;
-                data[idx + 3] = Math.round(Math.min(255, (color.a + extraAlpha) * 255));
+                const finalAlpha = Math.min(1.0, (color.a + extraAlpha)) * edgeFade;
+                data[idx + 3] = Math.round(finalAlpha * 255);
             } else {
                 data[idx + 3] = 0;
             }
@@ -58,7 +61,11 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
     ctx.putImageData(imgData, 0, 0);
 
     const bounds = [[GRID.minLat, GRID.minLon], [GRID.maxLat, GRID.maxLon]];
-    const fillOverlay = L.imageOverlay(canvas.toDataURL(), bounds, { opacity: 1, zIndex: 299 }).addTo(map);
+    const fillOverlay = L.imageOverlay(canvas.toDataURL(), bounds, {
+        opacity: 0.95,
+        zIndex: 299,
+        className: 'rainfall-contour-canvas'
+    }).addTo(map);
 
     // --- 等値線レイヤー ---
     const thresholds = isRprime

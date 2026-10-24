@@ -40,9 +40,9 @@ export const THRESHOLDS_BY_MODE = {
 
 export const GRID = {
     minLon: 130.8, maxLon: 134.6,
-    minLat: 33.7,  maxLat: 35.8,
+    minLat: 32.9,  maxLat: 35.8,
     cols: 228,
-    rows: 126
+    rows: 174
 };
 
 export const LON_STEP = (GRID.maxLon - GRID.minLon) / GRID.cols;
@@ -54,13 +54,16 @@ export const TPS_CONFIG = {
 };
 
 // 外挿域マスク: 凸包バッファ半径 (km)
-export const CONVEX_BUFFER_KM = 10;
+export const CONVEX_BUFFER_KM = 35;
 
 // 等雨量線の距離減衰設定
 export const DECAY = {
-    START_KM: 20,
-    END_KM:   60
+    START_KM: 25,
+    END_KM:   65
 };
+
+// 外郭エッジの滑らかなフェードアウト幅 (km)
+export const EDGE_FADE_KM = 25;
 
 // IDW上限バッファ余裕率
 export const IDW_UPPER_MARGIN = 1.1;

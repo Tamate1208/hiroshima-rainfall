@@ -157,9 +157,21 @@ export function buildSmoothGrid(rawStations) {
             const idwUpper = idwDen > 0 ? (idwNum / idwDen) * IDW_UPPER_MARGIN : 0;
             val = Math.max(0, Math.min(val, idwUpper));
 
-            const decay = minDist <= DECAY.START_KM ? 1.0
-                        : minDist >= DECAY.END_KM   ? 0.0
-                        : 1.0 - (minDist - DECAY.START_KM) / (DECAY.END_KM - DECAY.START_KM);
+            // 観測局からの最近傍距離 minDist に基づく滑らかなコサイン減衰（外郭ぼかし）
+            let decay = 1.0;
+            if (minDist > DECAY.START_KM) {
+                if (minDist >= DECAY.END_KM) {
+                    decay = 0.0;
+                } else {
+                    const t = (minDist - DECAY.START_KM) / (DECAY.END_KM - DECAY.START_KM);
+                    // コサインS字曲線減衰: 境界での傾きが0になり、折れ線やエッジが消えて美しく溶け込む
+                    decay = 0.5 * (1.0 + Math.cos(Math.PI * t));
+                }
+            }
+
+            if (maskPoly && !turf.booleanPointInPolygon([lon, lat], maskPoly)) {
+                decay = 0.0;
+            }
 
             grid[r * GRID.cols + c] = val * decay;
         }
