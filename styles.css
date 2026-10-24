@@ -1162,4 +1162,39 @@ select {
     }
 }
 
+/* 公的観測データ品質保証・出典クレジット注記 */
+.data-trust-notice {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(0, 221, 204, 0.06);
+    border: 1px solid rgba(0, 221, 204, 0.22);
+    border-radius: 8px;
+    font-size: 10.5px;
+    line-height: 1.5;
+    color: #94a3b8;
+}
+
+.trust-badge {
+    color: #00ddcc;
+    font-weight: 700;
+    margin-bottom: 5px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.trust-content strong {
+    color: #f1f5f9;
+}
+
+.trust-sources {
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 9.5px;
+    color: #64748b;
+}
+
+
 

@@ -426,43 +426,56 @@ async function mergeAdjacentStations(output) {
             type: 'amedas'
         });
 
-        let max60 = 0, max60Time = '';
-        let max24 = 0, max24Time = '';
+        let max60 = null, max60Time = '';
+        let max24 = null, max24Time = '';
         let cumulative = 0;
+        let validSlots = 0;
 
         tsKeys.forEach(ts => {
             const snap = snapshotsByTs[ts];
             const data = snap ? snap[s.id] : null;
-            const p1h  = data ? data.p1h  : 0;
-            const p10m = data ? data.p10m : 0;
-            const p24h = data ? data.p24h : 0;
+            // データが存在しない場合は null（欠測）として厳密に扱い、0mm（晴れ）と偽らない
+            const p1h  = data ? data.p1h  : null;
+            const p10m = data ? data.p10m : null;
+            const p24h = data ? data.p24h : null;
 
             if (!output.timeSeries[ts]) output.timeSeries[ts] = {};
             output.timeSeries[ts][s.name] = p1h;
 
-            if (p1h > max60) {
-                max60 = p1h;
-                max60Time = ts;
+            if (p1h !== null) {
+                validSlots++;
+                if (max60 === null || p1h > max60) {
+                    max60 = p1h;
+                    max60Time = ts;
+                }
             }
-            if (p24h > max24) {
-                max24 = p24h;
-                max24Time = ts;
+            if (p24h !== null) {
+                if (max24 === null || p24h > max24) {
+                    max24 = p24h;
+                    max24Time = ts;
+                }
             }
-            cumulative += p10m;
+            if (p10m !== null) {
+                cumulative += p10m;
+            }
         });
 
         const fallbackTime = tsKeys[tsKeys.length - 1] || '';
+        const finalMax60 = max60 !== null ? round1(max60) : 0;
+        const finalMax24 = max24 !== null ? round1(max24) : 0;
+        const finalCumulative = validSlots > 0 ? round1(cumulative) : 0;
+
         output.summary[row] = {
-            max60: round1(max60),
-            max60Raw: round1(max60),
+            max60: finalMax60,
+            max60Raw: finalMax60,
             max60Time: max60Time || fallbackTime,
             max60RawTime: max60Time || fallbackTime,
-            max24: round1(max24),
-            max24Raw: round1(max24),
+            max24: finalMax24,
+            max24Raw: finalMax24,
             max24Time: max24Time || fallbackTime,
             max24RawTime: max24Time || fallbackTime,
-            cumulative: round1(cumulative),
-            cumulativeRaw: round1(cumulative),
+            cumulative: finalCumulative,
+            cumulativeRaw: finalCumulative,
             maxRprime: 0,
             maxRprimeTime: '',
             maxRprimeLevel: 'normal'
