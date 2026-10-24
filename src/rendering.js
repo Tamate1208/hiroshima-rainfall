@@ -7,17 +7,31 @@ import { buildSmoothGrid } from './interpolation.js';
 import { getIsolines } from './contour.js';
 import { getRainfallColor, getWaterLevelColor, getSmoothRainfallColor, getSmoothRprimeColor } from './colors.js';
 
+// レンダリング用共有Canvasリソース（毎フレームの生成破棄を排除）
+let _sharedCanvas = null;
+let _sharedCtx    = null;
+let _sharedImgData = null;
+
+function getSharedCanvasResources() {
+    if (!_sharedCanvas) {
+        _sharedCanvas = document.createElement('canvas');
+        _sharedCanvas.width  = GRID.cols;
+        _sharedCanvas.height = GRID.rows;
+        _sharedCtx    = _sharedCanvas.getContext('2d');
+        _sharedImgData = _sharedCtx.createImageData(GRID.cols, GRID.rows);
+    }
+    return { canvas: _sharedCanvas, ctx: _sharedCtx, imgData: _sharedImgData };
+}
+
 /**
  * 等雨量線をレンダリング (同期)
  * @returns {{ isolineLayer: object|null, fillOverlay: object|null }}
  */
 export function renderIsolines(map, stations, mode, markersList, prevIsolineLayer, prevFillOverlay) {
-    console.debug(`[renderIsolines] stations=${stations.length}, mode=${mode}`);
     if (prevIsolineLayer) { map.removeLayer(prevIsolineLayer); }
-    if (prevFillOverlay)  { map.removeLayer(prevFillOverlay);  }
 
     if (stations.length < 3) {
-        console.debug('[renderIsolines] 観測局が3局未満のためスキップ');
+        if (prevFillOverlay) { map.removeLayer(prevFillOverlay); }
         return { isolineLayer: null, fillOverlay: null };
     }
 
@@ -29,19 +43,15 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
     const colorFn    = isRprime ? getSmoothRprimeColor : getSmoothRainfallColor;
     const minVal     = isRprime ? 50 : 0.5; // 0.5mmから自然にフェードイン
 
-    // --- なめらかなカラーコンター塗りつぶし (Canvas ImageData オーバーレイ) ---
-    const canvas = document.createElement('canvas');
-    canvas.width  = GRID.cols;
-    canvas.height = GRID.rows;
-    const ctx = canvas.getContext('2d');
-    const imgData = ctx.createImageData(GRID.cols, GRID.rows);
+    // --- なめらかなカラーコンター塗りつぶし (再利用 Canvas ImageData オーバーレイ) ---
+    const { canvas, ctx, imgData } = getSharedCanvasResources();
     const data = imgData.data;
 
-
     for (let r = 0; r < GRID.rows; r++) {
+        const rowOffset = r * GRID.cols;
         for (let c = 0; c < GRID.cols; c++) {
-            const val = grid[r * GRID.cols + c];
-            const idx = (r * GRID.cols + c) * 4;
+            const val = grid[rowOffset + c];
+            const idx = (rowOffset + c) * 4;
             if (val >= minVal) {
                 const color = colorFn(val);
                 data[idx]     = color.r;
@@ -61,11 +71,18 @@ export function renderIsolines(map, stations, mode, markersList, prevIsolineLaye
     ctx.putImageData(imgData, 0, 0);
 
     const bounds = [[GRID.minLat, GRID.minLon], [GRID.maxLat, GRID.maxLon]];
-    const fillOverlay = L.imageOverlay(canvas.toDataURL(), bounds, {
-        opacity: 0.95,
-        zIndex: 299,
-        className: 'rainfall-contour-canvas'
-    }).addTo(map);
+    const dataUrl = canvas.toDataURL();
+    let fillOverlay = prevFillOverlay;
+    if (fillOverlay) {
+        fillOverlay.setUrl(dataUrl);
+    } else {
+        fillOverlay = L.imageOverlay(dataUrl, bounds, {
+            opacity: 0.95,
+            zIndex: 299,
+            className: 'rainfall-contour-canvas'
+        }).addTo(map);
+    }
+
 
     // --- 等値線レイヤー ---
     const thresholds = isRprime

@@ -9,6 +9,8 @@ import { openChartModal } from './chart.js';
 
 // --- グローバル状態 ---
 let map, rainfallData, markers = [];
+let isolineLabelMarkers = [];
+let currentMarkerDataType = null;
 let waterlevelData = null;
 let riverGeoJson   = null;
 let currentDataType = 'rainfall';
@@ -72,6 +74,10 @@ async function init() {
             if (timestamps[tl.value]) updateFrame(timestamps[tl.value]);
         } else {
             markers.forEach(m => map.removeLayer(m));
+            markers = [];
+            currentMarkerDataType = null;
+            isolineLabelMarkers.forEach(m => map.removeLayer(m));
+            isolineLabelMarkers = [];
             if (isolineLayer) { map.removeLayer(isolineLayer); isolineLayer = null; }
             if (fillOverlay)  { map.removeLayer(fillOverlay);  fillOverlay  = null; }
             if (riverLayer)   { map.removeLayer(riverLayer);   riverLayer   = null; }
@@ -187,16 +193,18 @@ async function init() {
     });
 
 
-    map.on('zoomend', () => { updateZoomStyles(); if (currentTimestamp) updateFrame(currentTimestamp); });
+    map.on('zoomend', updateZoomStyles);
     updateZoomStyles();
 
     // 等雨量線 表示/非表示トグル
     document.getElementById('toggle-isolines').addEventListener('change', (e) => {
         showIsolines = e.target.checked;
         if (!showIsolines) {
-            // 即時非表示: 再描画なしで現在レイヤーを削除
+            // 即時非表示: 再描画なしで現在レイヤーおよびラベルを削除
             if (isolineLayer) { map.removeLayer(isolineLayer); isolineLayer = null; }
             if (fillOverlay)  { map.removeLayer(fillOverlay);  fillOverlay  = null; }
+            isolineLabelMarkers.forEach(m => map.removeLayer(m));
+            isolineLabelMarkers = [];
         } else {
             // 再表示: 現在タイムスタンプで再描画
             if (currentTimestamp) updateFrame(currentTimestamp);
@@ -250,6 +258,38 @@ function updateZoomStyles() {
     const valueSize = Math.max(8, 11  + (zoom - 10) * 2);
     document.documentElement.style.setProperty('--name-size',  `${nameSize}px`);
     document.documentElement.style.setProperty('--value-size', `${valueSize}px`);
+    document.body.classList.toggle('zoom-low', zoom < 10);
+}
+
+// 観測局マーカープーリング（DOM要素の再生成をゼロにし、高速再利用）
+function ensureStationMarkers(activeData) {
+    if (currentMarkerDataType === currentDataType && markers.length === activeData.mapping.length) {
+        return;
+    }
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+    currentMarkerDataType = currentDataType;
+
+    activeData.mapping.forEach((station, idx) => {
+        const icon = L.divIcon({
+            className: 'station-label',
+            html: `<div class="station-bubble"><div class="station-name">${station.name}</div><div class="value-display"></div></div>`
+        });
+        const marker = L.marker([station.lat, station.lon], { icon }).addTo(map);
+        marker._station = station;
+        marker._idx = idx;
+
+        // クリックイベント（グラフモーダル）を一度だけバインド
+        marker.on('click', () => {
+            const m = document.getElementById('mode-selector').value;
+            const isW = currentDataType === 'waterlevel';
+            if ((m === 'cumulative' && !isW) || (m === 'maxPeriod' && isW)) {
+                openChartModal(station, timestamps, isW ? waterlevelData : rainfallData, isW);
+            }
+        });
+
+        markers.push(marker);
+    });
 }
 
 async function loadData() {
@@ -317,12 +357,17 @@ function updateFrame(timestamp) {
     document.getElementById('time-display').innerText = `${displayDate} ${parts[1]}`;
     document.querySelector('.bottom-center').style.display = (mode === 'current') ? 'block' : 'none';
 
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
-    const zoom     = map.getZoom();
+    // 観測局マーカーの存在保証（初回および種別変更時のみ生成）
+    ensureStationMarkers(activeData);
+
+    // 等雨量線ラベルマーカーのみをリセット
+    isolineLabelMarkers.forEach(m => map.removeLayer(m));
+    isolineLabelMarkers = [];
+
     const stations = [];
 
-    activeData.mapping.forEach((station, idx) => {
+    markers.forEach((marker, idx) => {
+        const station = marker._station;
         let value = 0, displayValue = 0;
         let isMissing = false, isDisplayMissing = false;
         let levelStatus = 'normal';
@@ -386,24 +431,28 @@ function updateFrame(timestamp) {
             : v.toFixed(mode === 'max24' ? 1 : 0);
         const displayVal = isDisplayMissing ? '---' : formatter(displayValue);
 
-        const icon = L.divIcon({
-            className: 'station-label',
-            html: `<div class="station-bubble">${zoom >= 10 ? `<div class="station-name">${station.name}</div>` : ''}<div class="value-display" style="color:${color}">${displayVal}</div></div>`
-        });
-        const marker = L.marker([station.lat, station.lon], { icon }).addTo(map);
+        // 既存DOMノードのテキスト・色を高速上書き（DOM再構築ゼロ）
+        const el = marker.getElement();
+        if (el) {
+            const valEl = marker._valEl || (marker._valEl = el.querySelector('.value-display'));
+            if (valEl) {
+                valEl.textContent = displayVal;
+                valEl.style.color = color;
+            }
+        }
 
+        // ツールチップ設定
+        let tooltipText = null;
         if ((mode === 'cumulative' && !isWaterLevel) || (mode === 'maxPeriod' && isWaterLevel)) {
-            marker.bindTooltip('クリックしてグラフを表示', { direction: 'top', sticky: true });
-            marker.on('click', () => openChartModal(station, timestamps, activeData, isWaterLevel));
+            tooltipText = 'クリックしてグラフを表示';
         } else if (mode === 'rprimeMax') {
-            // R' 期間最大値: 記録日時をツールチップで表示
             const summary = rainfallData?.summary?.[station.row];
             if (summary?.maxRprimeTime) {
                 const tsParts = summary.maxRprimeTime.split(' ');
                 const fmtTime = tsParts.length >= 2
                     ? `${parseInt(tsParts[0].substring(4,6))}/${parseInt(tsParts[0].substring(6,8))} ${tsParts[1]}`
                     : summary.maxRprimeTime;
-                marker.bindTooltip(`R'最大記録: ${fmtTime}`, { direction: 'top', sticky: true });
+                tooltipText = `R'最大記録: ${fmtTime}`;
             }
         } else if (mode !== 'current' && mode !== 'rprime') {
             const summary = isWaterLevel ? activeData.summary[idx] : activeData.summary[station.row];
@@ -416,12 +465,21 @@ function updateFrame(timestamp) {
                     const fmtTime = tsParts.length >= 2
                         ? `${parseInt(tsParts[0].substring(4,6))}/${parseInt(tsParts[0].substring(6,8))} ${tsParts[1]}`
                         : peakTime;
-                    marker.bindTooltip(`記録日時: ${fmtTime}`, { direction: 'top', sticky: true });
+                    tooltipText = `記録日時: ${fmtTime}`;
                 }
             }
         }
 
-        markers.push(marker);
+        if (tooltipText) {
+            if (marker.getTooltip()) {
+                marker.setTooltipContent(tooltipText);
+            } else {
+                marker.bindTooltip(tooltipText, { direction: 'top', sticky: true });
+            }
+        } else if (marker.getTooltip()) {
+            marker.unbindTooltip();
+        }
+
         if (!isMissing) stations.push({ lat: station.lat, lon: station.lon, value, station, levelStatus });
     });
 
@@ -444,12 +502,12 @@ function updateFrame(timestamp) {
                     rainStations.push({ lat: station.lat, lon: station.lon, value: raw, station });
                 }
             });
-            ({ isolineLayer, fillOverlay } = renderIsolines(map, rainStations, 'current', markers, isolineLayer, fillOverlay));
+            ({ isolineLayer, fillOverlay } = renderIsolines(map, rainStations, 'current', isolineLabelMarkers, isolineLayer, fillOverlay));
         }
     } else {
         if (riverLayer) { map.removeLayer(riverLayer); riverLayer = null; }
         if (showIsolines) {
-            ({ isolineLayer, fillOverlay } = renderIsolines(map, stations, mode, markers, isolineLayer, fillOverlay));
+            ({ isolineLayer, fillOverlay } = renderIsolines(map, stations, mode, isolineLabelMarkers, isolineLayer, fillOverlay));
         } else {
             if (isolineLayer) { map.removeLayer(isolineLayer); isolineLayer = null; }
             if (fillOverlay)  { map.removeLayer(fillOverlay);  fillOverlay  = null; }
