@@ -1,7 +1,7 @@
 {
   "name": "hiroshima-rainfall",
   "version": "1.0.0",
-  "description": "広島県内雨量可視＋",
+  "description": "GioV 雨量計 | GioV Rainfall Monitor",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",

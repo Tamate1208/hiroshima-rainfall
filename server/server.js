@@ -88,7 +88,7 @@ app.post('/api/update-data', (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-    console.log(`\n🌧  広島県内雨量可視＋`);
+    console.log(`\n🌧  GioV 雨量計 (GioV Rainfall Monitor)`);
     console.log(`   http://localhost:${port}\n`);
 });
 

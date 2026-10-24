@@ -309,7 +309,7 @@ export function exportPDF() {
     html += `
             </main>
             <footer class="print-footer">
-                <span>広島県内雨量可視＋ (Hiroshima Rainfall Monitor)</span>
+                <span>GioV 雨量計 (GioV Rainfall Monitor)</span>
                 <span>※本資料は広島県防災Web公表データに基づき自動集計されたものです。</span>
             </footer>
         </div>
