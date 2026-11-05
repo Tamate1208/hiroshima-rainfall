@@ -399,10 +399,23 @@ async function init() {
     document.getElementById('current-date').innerText = `対象データ期間: ${formatDateOnly(yesterdayStr)} ～ ${formatDateOnly(todayStr)}`;
 
     document.getElementById('start-date').addEventListener('change', (e) => {
-        document.getElementById('end-date').value = e.target.value;
+        const curEnd = document.getElementById('end-date').value;
+        if (!curEnd || curEnd < e.target.value) {
+            document.getElementById('end-date').value = e.target.value;
+        }
     });
 
     await loadData();
+
+    // 読み込んだデータに期間情報(range)があればUIを同期
+    if (rainfallData && rainfallData.range && rainfallData.range.start && rainfallData.range.end) {
+        document.getElementById('start-date').value = rainfallData.range.start;
+        document.getElementById('end-date').value = rainfallData.range.end;
+        const dStart = formatDateOnly(rainfallData.range.start);
+        const dEnd = formatDateOnly(rainfallData.range.end);
+        document.getElementById('current-date').innerText = `対象データ期間: ${dStart} ～ ${dEnd}`;
+    }
+
     const initialLoading = document.getElementById('initial-loading');
     if (initialLoading) initialLoading.classList.add('hidden');
 
@@ -427,7 +440,10 @@ async function init() {
         const start = document.getElementById('start-date').value;
         const end   = document.getElementById('end-date').value;
         const btn   = document.getElementById('update-data');
+        const statusEl = document.getElementById('update-status');
         btn.disabled = true; btn.innerText = '取得中...';
+        if (statusEl) statusEl.innerText = '';
+
         try {
             const res = await fetch('/api/update-data', {
                 method: 'POST',
@@ -442,13 +458,25 @@ async function init() {
                 document.getElementById('toggle-settings').innerText = '▼';
                 
                 // データ更新後は期間範囲の表示に変更
-                const formatDateOnly = (val) => val ? val.replace(/-/g, '/').replace(/\/0/g, '/') : '';
                 const dateLabel = (start === end) 
                     ? `${formatDateOnly(start)}` 
                     : `${formatDateOnly(start)} ～ ${formatDateOnly(end)}`;
                 document.getElementById('current-date').innerText = `対象データ期間: ${dateLabel}`;
+                if (statusEl) statusEl.innerText = '✓ 更新完了';
+            } else {
+                throw new Error(`サーバー応答エラー (${res.status})`);
             }
-        } finally { btn.innerText = 'データ更新'; btn.disabled = false; }
+        } catch (err) {
+            console.warn('Update API not available:', err);
+            // 静的ホスティング環境（Render Static Site / GitHub Pages等、/api/update-data が存在しない場合）
+            if (statusEl) {
+                statusEl.innerHTML = '<span style="color:#60a5fa; font-size:11px;">※最新データは毎時自動更新中</span>';
+            }
+            alert('【静的サイト運用の操作案内】\n本アプリは現在、完全静的サイトとして高速運用されており、最新の雨量データはGitHub Actionsによって毎時定時配信されています。\n\n過去の任意豪雨期間のデータを手動取得したい場合は、GitHub Actions画面の「Run workflow」から期間を指定して実行することが可能です。');
+        } finally {
+            btn.innerText = 'データ更新';
+            btn.disabled = false;
+        }
     });
 
     map.on('zoomend', () => { updateZoomStyles(); if (currentTimestamp) updateFrame(currentTimestamp); });
