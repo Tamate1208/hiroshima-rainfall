@@ -5,7 +5,6 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "update-data": "node process_data.js",
     "dev": "vite --port 5500",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
